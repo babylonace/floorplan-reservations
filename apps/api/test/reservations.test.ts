@@ -63,8 +63,8 @@ const EIGHT_PM = "2030-06-01T20:00:00+02:00";
 describe("POST /venues/:slug/reservations", () => {
   it("books the smallest table that fits and keeps it as long as the party size says", async () => {
     await venueWith("book-basic", [
-      { label: "four", minSeats: 2, maxSeats: 4, x: 100 },
-      { label: "two", minSeats: 1, maxSeats: 2, x: 400 },
+      { label: "four", maxSeats: 4, x: 100 },
+      { label: "two", maxSeats: 2, x: 400 },
     ]);
     const response = await book("book-basic", { startsAt: EIGHT_PM, partySize: 2 });
 

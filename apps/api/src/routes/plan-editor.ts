@@ -544,9 +544,7 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
 
   app.post<{
     Params: { slug: string; zoneId: string };
-    Body: Required<
-      Pick<TableBody, "label" | "minSeats" | "maxSeats" | "x" | "y" | "width" | "height">
-    > &
+    Body: Required<Pick<TableBody, "label" | "maxSeats" | "x" | "y" | "width" | "height">> &
       TableBody;
   }>(
     "/venues/:slug/zones/:zoneId/tables",
@@ -562,7 +560,7 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
         body: {
           type: "object",
           additionalProperties: false,
-          required: ["label", "minSeats", "maxSeats", "x", "y", "width", "height"],
+          required: ["label", "maxSeats", "x", "y", "width", "height"],
           properties: tableFields,
         },
         response: {
@@ -592,7 +590,7 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
           const table: PlanTable = {
             id: NEW_TABLE_ID,
             label: body.label.trim(),
-            minSeats: body.minSeats,
+            minSeats: body.minSeats ?? 1,
             maxSeats: body.maxSeats,
             shape: body.shape ?? "rect",
             x: body.x,

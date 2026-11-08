@@ -59,7 +59,6 @@ export const tableSchema = {
     "id",
     "zoneId",
     "label",
-    "minSeats",
     "maxSeats",
     "shape",
     "x",
