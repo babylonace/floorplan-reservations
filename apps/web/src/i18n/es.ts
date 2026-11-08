@@ -112,15 +112,12 @@ export const es: DeepPartial<Messages> = {
       "Tab pasa de una mesa a otra. Más y menos acercan y alejan el plano; 0 lo enseña entero.",
     empty: "Zona vacía. Añade una mesa con los botones de arriba.",
     emptyReadOnly: "Esta zona todavía no tiene mesas.",
-    seats: (min: number, max: number) =>
-      min === max ? String(min) : `${String(min)}–${String(max)}`,
+    seats: (max: number) => String(max),
     tableName: (d: TableDescription) =>
       [
         `Mesa ${d.label}`,
         d.round ? "redonda" : "rectangular",
-        d.minSeats === d.maxSeats
-          ? `para ${String(d.maxSeats)}`
-          : `de ${String(d.minSeats)} a ${String(d.maxSeats)} personas`,
+        `para ${String(d.maxSeats)}`,
         `a ${d.x} de la izquierda y ${d.y} de arriba`,
         d.rotation === 0 ? "" : `girada ${String(d.rotation)} grados`,
         d.seatedSides === null

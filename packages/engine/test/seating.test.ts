@@ -35,7 +35,7 @@ const row = zone("room", [
   table({ id: "a", x: 100 }),
   table({ id: "b", x: 180 }),
   table({ id: "c", x: 260 }),
-  table({ id: "big", x: 1000, y: 1000, minSeats: 3, maxSeats: 4, width: 120 }),
+  table({ id: "big", x: 1000, y: 1000, maxSeats: 4, width: 120 }),
 ]);
 
 describe("canJoin", () => {
@@ -66,9 +66,10 @@ describe("seatingOptions", () => {
     expect(options.slice(0, 3).map((option) => option.tableIds)).toEqual([["a"], ["b"], ["c"]]);
   });
 
-  it("respects a table's minimum seats", () => {
-    // The 4-seat table wants at least 3 people, so a couple never gets it.
-    expect(seatingOptions(2, [row]).some((option) => option.tableIds.includes("big"))).toBe(false);
+  it("gives the smallest table that fits", () => {
+    // A couple gets a 2-seat table, not the 4-seat one.
+    expect(seatingOptions(2, [row])[0]).toEqual({ zoneId: "room", tableIds: ["a"], seats: 2 });
+    // A party of 3 gets the 4-seat table.
     expect(seatingOptions(3, [row])[0]).toEqual({ zoneId: "room", tableIds: ["big"], seats: 4 });
   });
 

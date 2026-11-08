@@ -140,31 +140,16 @@ export function TableInspector({
           </fieldset>
         )}
 
-        <fieldset className="field">
-          <legend>{t.tables.guests}</legend>
-          <div className="field-row">
-            <NumberField
-              label={t.tables.minSeats}
-              value={table.minSeats}
-              min={1}
-              max={100}
-              disabled={!editable}
-              onChange={(minSeats) => {
-                onChange({ minSeats });
-              }}
-            />
-            <NumberField
-              label={t.tables.maxSeats}
-              value={table.maxSeats}
-              min={1}
-              max={100}
-              disabled={!editable}
-              onChange={(maxSeats) => {
-                onChange({ maxSeats });
-              }}
-            />
-          </div>
-        </fieldset>
+        <NumberField
+          label={t.tables.seats}
+          value={table.maxSeats}
+          min={1}
+          max={100}
+          disabled={!editable}
+          onChange={(maxSeats) => {
+            onChange({ maxSeats, minSeats: 1 });
+          }}
+        />
 
         <div className="field-row">
           <MetreField

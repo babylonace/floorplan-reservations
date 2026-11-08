@@ -797,7 +797,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
               key={table.id}
               table={table}
               unit={unit}
-              seats={t.plan.seats(table.minSeats, table.maxSeats)}
+              seats={t.plan.seats(table.maxSeats)}
               problems={problems.get(table.id) ?? 0}
             />
           ))}

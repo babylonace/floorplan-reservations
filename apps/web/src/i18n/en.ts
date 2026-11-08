@@ -129,15 +129,12 @@ export const en = {
     empty: "Empty zone. Add a table with the buttons above.",
     emptyReadOnly: "This zone has no tables yet.",
     /** Under the table's name on the plan, where there is little room. */
-    seats: (min: number, max: number) =>
-      min === max ? String(min) : `${String(min)}–${String(max)}`,
+    seats: (max: number) => String(max),
     tableName: (d: TableDescription) =>
       [
         `Table ${d.label}`,
         d.round ? "round" : "rectangular",
-        d.minSeats === d.maxSeats
-          ? `for ${String(d.maxSeats)}`
-          : `for ${String(d.minSeats)} to ${String(d.maxSeats)}`,
+        `for ${String(d.maxSeats)}`,
         `${d.x} from the left and ${d.y} from the top`,
         d.rotation === 0 ? "" : `turned ${String(d.rotation)} degrees`,
         d.seatedSides === null
