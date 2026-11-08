@@ -1,0 +1,45 @@
+# Local setup: PostgreSQL plus the API. Ports are only opened on this computer (127.0.0.1).
+# Copy .env.example to .env to change the password or the ports.
+
+name: floorplan-reservations
+
+services:
+  db:
+    image: postgres:18-alpine@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395
+    environment:
+      POSTGRES_DB: floorplan
+      POSTGRES_USER: floorplan
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-only-password}
+    volumes:
+      # PostgreSQL 18 images keep their data under /var/lib/postgresql/18.
+      - db-data:/var/lib/postgresql
+      - ./db/docker-init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U floorplan -d floorplan"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  api:
+    build: .
+    # Migrations run before the server starts. They take a lock, so several copies are safe.
+    command: ["sh", "-c", "node apps/api/dist/migrate-cli.js && exec node apps/api/dist/server.js"]
+    environment:
+      DATABASE_URL: postgres://floorplan:${POSTGRES_PASSWORD:-local-only-password}@db:5432/floorplan
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "127.0.0.1:${API_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  db-data:
