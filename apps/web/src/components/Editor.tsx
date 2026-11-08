@@ -495,27 +495,27 @@ function ShortcutsButton() {
 
   useEffect(() => {
     if (!open) return;
+    // Both listen before anything else on the page: a table stops its own pointer events, and
+    // Escape must not also let go of the selected table.
     function outside(event: globalThis.PointerEvent) {
       if (!wrap.current?.contains(event.target as Node)) setOpen(false);
     }
-    document.addEventListener("pointerdown", outside);
+    function escape(event: globalThis.KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setOpen(false);
+      button.current?.focus();
+    }
+    document.addEventListener("pointerdown", outside, true);
+    document.addEventListener("keydown", escape, true);
     return () => {
-      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("pointerdown", outside, true);
+      document.removeEventListener("keydown", escape, true);
     };
   }, [open]);
 
   return (
-    <div
-      className="shortcuts"
-      ref={wrap}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && open) {
-          event.stopPropagation();
-          setOpen(false);
-          button.current?.focus();
-        }
-      }}
-    >
+    <div className="shortcuts" ref={wrap}>
       <button
         ref={button}
         type="button"

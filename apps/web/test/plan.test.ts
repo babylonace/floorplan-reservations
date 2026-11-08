@@ -427,6 +427,25 @@ describe("chair layout", () => {
     }
   });
 
+  it("shrinks chairs on a crowded side so they never overlap", () => {
+    for (const [width, seats] of [
+      [60, 16],
+      [30, 16],
+    ] as const) {
+      const { chairs, radius } = chairLayout({
+        shape: "rect",
+        width,
+        height: width,
+        maxSeats: seats,
+        seatSides: null,
+      });
+      const top = chairs.filter((chair) => chair.y < 0).map((chair) => chair.x);
+      for (let i = 1; i < top.length; i++) {
+        expect((top[i] ?? 0) - (top[i - 1] ?? 0)).toBeGreaterThan(2 * radius);
+      }
+    }
+  });
+
   it("keeps chairs from overlapping on a side when there is room for them", () => {
     const { chairs, radius } = chairLayout({
       shape: "rect",

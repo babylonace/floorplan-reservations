@@ -240,6 +240,25 @@ describe("the plan editor", () => {
     await user.keyboard("{Escape}");
     expect(button).toHaveAttribute("aria-expanded", "false");
     expect(button).toHaveFocus();
+
+    // Pressing a table closes it too, though tables keep their pointer events to themselves.
+    // (jsdom cannot place a pointer on the plan, so the drag that starts finds no point.)
+    Object.defineProperty(SVGSVGElement.prototype, "getScreenCTM", {
+      configurable: true,
+      value: () => null,
+    });
+    await user.click(button);
+    await user.pointer({ keys: "[MouseLeft>]", target: await findTable("1") });
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    await user.pointer({ keys: "[/MouseLeft]" });
+    Reflect.deleteProperty(SVGSVGElement.prototype, "getScreenCTM");
+
+    // Escape closes it wherever the focus is, and does not also let go of the table.
+    await user.click(button);
+    (await findTable("1")).focus();
+    await user.keyboard("{Escape}");
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    expect(await findTable("1")).toHaveAttribute("aria-pressed", "true");
   });
 
   it("shows no problems section while the plan has none", async () => {

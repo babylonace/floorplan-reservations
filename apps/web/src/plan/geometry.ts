@@ -262,6 +262,6 @@ export function chairLayout(
       }
     });
   }
-  const radius = Math.max(6, Math.min(CHAIR_RADIUS, room / 2 - 2));
+  const radius = Math.max(1, Math.min(CHAIR_RADIUS, room / 2 - 1));
   return { radius, chairs };
 }
