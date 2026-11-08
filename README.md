@@ -92,3 +92,5 @@ Node 24, TypeScript, Fastify, PostgreSQL 18, Vitest, ESLint, Prettier, Docker Co
 ## License
 
 [MIT](LICENSE)
+
+Built by [babylonace](https://github.com/babylonace). AI-assisted.
