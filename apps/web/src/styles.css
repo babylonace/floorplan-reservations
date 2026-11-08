@@ -223,8 +223,17 @@ select {
 .field-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  align-items: end;
+  /* Top-aligned, so an error under one field never pushes its neighbour's label down. */
+  align-items: start;
   gap: 0.5rem;
+}
+
+/* Paired labels stay on one line, so both inputs start at the same height. */
+.field-row > .field > label {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Fields grouped under one legend, such as a table's position: the group keeps the spacing. */
