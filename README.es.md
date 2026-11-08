@@ -4,7 +4,7 @@ Reservas de mesa para restaurantes: el local dibuja su propio plano y el motor d
 
 [Read in English](README.md)
 
-> **Estado: muy al principio.** Esto es la fase 0: el esqueleto del proyecto, el primer esquema de base de datos, un motor pequeño y la CI. Todavía no se puede reservar. Mira la [hoja de ruta](#hoja-de-ruta).
+> **Estado: muy al principio.** La fase 1 está hecha: la API ya acepta reservas y la base de datos rechaza las reservas dobles. Todavía no hay editor del plano, página de reserva ni panel del local. Mira la [hoja de ruta](#hoja-de-ruta).
 
 ## Por qué
 
@@ -13,7 +13,7 @@ Muchas herramientas de reservas de código abierto tratan las mesas como una lis
 Así que la idea es:
 
 - **El plano manda.** Cada local coloca sus mesas (posición, tamaño, forma, giro, zona, aspecto) y el motor lee esos mismos datos. Si en el plano dos mesas se tocan, el motor puede juntarlas.
-- **Cero reservas dobles, y lo garantiza la base de datos.** No un "if" en el código que dos peticiones a la vez pueden saltarse, sino una restricción de PostgreSQL, con tests que lanzan reservas a la vez contra ella. (Llega en la fase 1.)
+- **Cero reservas dobles, y lo garantiza la base de datos.** No un "if" en el código que dos peticiones a la vez pueden saltarse, sino una restricción de PostgreSQL, con tests que lanzan reservas a la vez contra ella.
 - **Varios idiomas desde el principio.** Quien reserva lo hace en su idioma y recibe los mensajes en ese idioma. El panel del local está en español por defecto, con inglés disponible.
 - **Lo instalas tú.** Un `docker compose up` y funciona. Sin comisiones por cubierto.
 
@@ -24,8 +24,10 @@ Fuera de alcance: comandas, pantallas de cocina, TPV.
 - `packages/engine`: las reglas de reserva, sin base de datos ni red, así que se prueban rápido.
   - `validateZone` revisa el plano: mesas que se pisan, que se salen de la sala o con un número de asientos imposible. Tiene en cuenta el giro.
   - `durationFor` dice cuánto tiempo ocupa la mesa un grupo, según su tamaño.
+  - `seatingOptions` dice dónde podría sentarse un grupo, de mejor a peor: la mesa más pequeña en la que cabe y, si no hay, mesas vecinas juntas.
 - `apps/api`: una API con [Fastify](https://fastify.dev/) en TypeScript.
   - `GET /venues/:slug/floor-plan` devuelve las zonas y las mesas, más los problemas que el motor encuentra en el plano.
+  - `POST /venues/:slug/reservations` reserva mesa. El motor elige la mesa (o mesas) y cuánto tiempo se guarda depende del tamaño del grupo. Responde `409` si no queda nada libre.
   - `GET /health` comprueba que la API llega a la base de datos.
   - `GET /openapi.json` describe la API (OpenAPI 3.1).
 - `db/migrations`: el esquema, en archivos SQL normales. Un pequeño programa los aplica en orden, cada uno en su transacción y con un bloqueo para que dos copias de la app no migren a la vez.
@@ -77,9 +79,21 @@ La CI pasa las mismas comprobaciones en cada pull request contra PostgreSQL 18, 
 - `style` es JSON libre para el editor del plano (colores y similares). El motor de reservas nunca lo lee.
 - Una reserva puede ocupar varias mesas (`reservation_tables`), para grupos en mesas juntas.
 
+## Cómo se evitan las reservas dobles
+
+- Cada reserva guarda su hora como un rango, `[inicio, fin)`. Una reserva que acaba a las 21:30 y otra que empieza a las 21:30 no se pisan.
+- `reservation_tables` guarda una copia de ese rango y de si la reserva sigue ocupando sus mesas (las canceladas y las de quien no vino, no). La copia forma parte de la clave foránea hacia la reserva con `on update cascade`, así que mover o cancelar una reserva la actualiza en la misma orden.
+- Una restricción de exclusión (`btree_gist`) rechaza dos filas de la misma mesa con rangos que se pisan. Se cumple escriba quien escriba en la base de datos.
+- La API mira las mesas libres, reserva la mejor opción y, si otra petición llegó antes, vuelve a un punto guardado y lo intenta otra vez. Las peticiones que quieren la misma mesa esperan su turno, así no se bloquean entre ellas.
+- Los tests frenan las escrituras hasta que todas las peticiones de una ráfaga han mirado las mesas libres y luego las sueltan a la vez: 25 peticiones por una sola mesa dan exactamente una reserva.
+
+Mesas juntas: solo mesas rectangulares de la misma zona, una al lado de otra (5 cm de hueco como mucho) y sin girar en ángulo. Tres como máximo, y todas tienen que hacer falta.
+
+Todavía sin comprobar: el horario de apertura. Por ahora todos los locales usan las duraciones de ejemplo de `durationFor`.
+
 ## Hoja de ruta
 
-1. **Motor de reservas sin reservas dobles.** Una restricción de exclusión de PostgreSQL sobre mesa y franja horaria, con tests de concurrencia.
+1. ~~**Motor de reservas sin reservas dobles.**~~ Hecho.
 2. **Editor del plano.** Dibujar zonas y mesas; las mesas que se tocan se pueden juntar.
 3. **Página pública de reserva.** Varios idiomas (también de derecha a izquierda), propone horas cercanas cuando la pedida está llena, pensada para cumplir el RGPD.
 4. **Panel del local.** El servicio del día, confirmar, cancelar, sentar, avisos por email.

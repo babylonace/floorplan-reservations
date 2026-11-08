@@ -136,6 +136,10 @@ describe("GET /openapi.json", () => {
 
     const spec = response.json<{ openapi: string; paths: Record<string, unknown> }>();
     expect(spec.openapi).toBe("3.1.0");
-    expect(Object.keys(spec.paths).sort()).toEqual(["/health", "/venues/{slug}/floor-plan"]);
+    expect(Object.keys(spec.paths).sort()).toEqual([
+      "/health",
+      "/venues/{slug}/floor-plan",
+      "/venues/{slug}/reservations",
+    ]);
   });
 });
