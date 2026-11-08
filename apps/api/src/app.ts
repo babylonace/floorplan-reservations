@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastif
 import type { Pool } from "./db.js";
 import { floorPlanRoutes } from "./routes/floor-plan.js";
 import { healthRoutes } from "./routes/health.js";
+import { reservationRoutes } from "./routes/reservations.js";
 
 export interface AppOptions {
   pool: Pool;
@@ -36,6 +37,7 @@ export async function buildApp({ pool, logger = false }: AppOptions): Promise<Fa
 
   await app.register(healthRoutes, { pool });
   await app.register(floorPlanRoutes, { pool });
+  await app.register(reservationRoutes, { pool });
 
   app.get("/openapi.json", { schema: { hide: true } }, () => app.swagger());
 

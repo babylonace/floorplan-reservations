@@ -5,6 +5,7 @@ import { SAMPLE_TABLE_ID, SAMPLE_VENUE_ID, SAMPLE_ZONE_ID, testDatabaseUrl } fro
 
 // PostgreSQL error codes.
 const CHECK_VIOLATION = "23514";
+const EXCLUSION_VIOLATION = "23P01";
 const FOREIGN_KEY_VIOLATION = "23503";
 const UNIQUE_VIOLATION = "23505";
 
@@ -209,5 +210,90 @@ describe("reservations", () => {
       [rows[0]?.id],
     );
     expect(after.rows[0]?.changed).toBe(true);
+  });
+});
+
+describe("double booking", () => {
+  async function bookedAt(startsAt: string, endsAt: string): Promise<string> {
+    const { rows } = await insertReservation({ startsAt, endsAt, email: "guest@example.com" });
+    const id = rows[0]?.id;
+    if (!id) throw new Error("Reservation was not created");
+    await bookSampleTable(id);
+    return id;
+  }
+
+  it("rejects a second booking of the same table at an overlapping time", async () => {
+    await bookedAt("2030-05-01T20:00:00+02:00", "2030-05-01T21:30:00+02:00");
+    await expect(
+      bookedAt("2030-05-01T21:00:00+02:00", "2030-05-01T22:30:00+02:00"),
+    ).rejects.toMatchObject({ code: EXCLUSION_VIOLATION });
+  });
+
+  it("allows one booking to start exactly when the previous one ends", async () => {
+    await bookedAt("2030-05-01T20:00:00+02:00", "2030-05-01T21:30:00+02:00");
+    await expect(
+      bookedAt("2030-05-01T21:30:00+02:00", "2030-05-01T23:00:00+02:00"),
+    ).resolves.toBeDefined();
+  });
+
+  it("frees the table when a booking is cancelled or marked as a no-show", async () => {
+    for (const status of ["cancelled", "no_show"]) {
+      const id = await bookedAt("2030-05-02T20:00:00+02:00", "2030-05-02T21:30:00+02:00");
+      await client.query("update reservations set status = $1 where id = $2", [status, id]);
+    }
+    await expect(
+      bookedAt("2030-05-02T20:00:00+02:00", "2030-05-02T21:30:00+02:00"),
+    ).resolves.toBeDefined();
+  });
+
+  it("will not bring back a cancelled booking whose table was given away", async () => {
+    const first = await bookedAt("2030-05-03T20:00:00+02:00", "2030-05-03T21:30:00+02:00");
+    await client.query("update reservations set status = 'cancelled' where id = $1", [first]);
+    await bookedAt("2030-05-03T20:00:00+02:00", "2030-05-03T21:30:00+02:00");
+
+    await expect(
+      client.query("update reservations set status = 'confirmed' where id = $1", [first]),
+    ).rejects.toMatchObject({ code: EXCLUSION_VIOLATION });
+  });
+
+  it("will not move a booking onto a time its table is already taken", async () => {
+    await bookedAt("2030-05-04T20:00:00+02:00", "2030-05-04T21:30:00+02:00");
+    const later = await bookedAt("2030-05-04T22:00:00+02:00", "2030-05-04T23:30:00+02:00");
+
+    await expect(
+      client.query(
+        "update reservations set starts_at = '2030-05-04T21:00:00+02:00' where id = $1",
+        [later],
+      ),
+    ).rejects.toMatchObject({ code: EXCLUSION_VIOLATION });
+  });
+
+  it("keeps the table's copy of the booking time in step with the booking", async () => {
+    const id = await bookedAt("2030-05-05T20:00:00+02:00", "2030-05-05T21:30:00+02:00");
+    await client.query(
+      "update reservations set ends_at = '2030-05-05T22:00:00+02:00', status = 'cancelled' where id = $1",
+      [id],
+    );
+    const { rows } = await client.query<{ same: boolean }>(
+      `select rt.during = r.during and rt.holds_tables = r.holds_tables and not rt.holds_tables as same
+         from reservation_tables rt join reservations r on r.id = rt.reservation_id
+        where r.id = $1`,
+      [id],
+    );
+    expect(rows).toEqual([{ same: true }]);
+  });
+
+  it("refuses a hand-written copy that does not match the booking", async () => {
+    const { rows } = await insertReservation({
+      startsAt: "2030-05-06T20:00:00+02:00",
+      endsAt: "2030-05-06T21:30:00+02:00",
+      email: "guest@example.com",
+    });
+    await bookSampleTable(rows[0]?.id);
+    await expect(
+      client.query("update reservation_tables set holds_tables = false where reservation_id = $1", [
+        rows[0]?.id,
+      ]),
+    ).rejects.toMatchObject({ code: FOREIGN_KEY_VIOLATION });
   });
 });
