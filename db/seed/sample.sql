@@ -8,7 +8,7 @@ values (
   'Sample Bistro',
   'Europe/Madrid',
   'es',
-  array['es', 'en', 'fr']
+  array['es', 'en', 'ar']
 )
 on conflict do nothing;
 

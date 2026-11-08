@@ -131,7 +131,14 @@ describe("zones", () => {
 
     expect(response.statusCode).toBe(201);
     const zone = response.json<ApiZone>();
-    expect(zone).toMatchObject({ name: "Terrace", width: 900, height: 400, sortOrder: 5 });
+    expect(zone).toMatchObject({
+      name: "Terrace",
+      width: 900,
+      height: 400,
+      sortOrder: 5,
+      // Guests may ask for a new zone unless staff say otherwise.
+      guestSelectable: true,
+    });
     const plan = await floorPlan("zone-create");
     expect(plan.zones.map((z) => z.name)).toEqual(["Room", "Terrace"]);
   });
@@ -187,6 +194,18 @@ describe("zones", () => {
       width: 1500,
       height: 1000,
     });
+  });
+
+  it("lets staff decide whether guests may ask for a zone", async () => {
+    const { zoneId } = await venueWith("zone-guests");
+    const hidden = await call("PATCH", `/venues/zone-guests/zones/${zoneId}`, {
+      guestSelectable: false,
+    });
+    expect(hidden.json<ApiZone>()).toMatchObject({ name: "Room", guestSelectable: false });
+    const plan = await floorPlan("zone-guests");
+    expect(plan.zones[0]).toMatchObject({ guestSelectable: false });
+    const options = await app.inject({ method: "GET", url: "/venues/zone-guests/booking-options" });
+    expect(options.json<{ zones: unknown[] }>().zones).toEqual([]);
   });
 
   it("refuses to shrink a zone so that a table ends up outside", async () => {

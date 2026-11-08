@@ -4,7 +4,7 @@ Table reservations for restaurants, where the venue draws its own floor plan and
 
 [Leer en español](README.es.md)
 
-> **Status: early.** The API can take a booking, the database refuses double bookings, and owners draw their floor plan in a browser editor. Public bookings respect opening hours, a booking horizon and per-address limits. Staff sign in with a password, and only a venue's owners can change the plan. There is no booking page or staff screen yet. See the [roadmap](#roadmap).
+> **Status: early.** The API can take a booking, the database refuses double bookings, and owners draw their floor plan in a browser editor. Public bookings respect opening hours, a booking horizon and per-address limits. Staff sign in with a password, and only a venue's owners can change the plan. Guests book on a public page in Spanish, English or Arabic. There is no staff screen for the day's bookings yet. See the [roadmap](#roadmap).
 
 ![The floor plan editor: a dining room drawn to scale on a green cutting mat, with table 3 selected; the plan fills the right of the window and a column on the left holds the venue and the account, the add buttons, the details of table 3 and, at the bottom, Save, Discard and Delete zone; the language and signing out are in the top right corner](docs/images/editor.png)
 
@@ -29,15 +29,17 @@ Out of scope: orders, kitchen screens, point of sale.
   - `seatingOptions` lists where a party could sit, best first: the smallest single table that fits, otherwise neighbouring tables pushed together.
   - `canStillSeat` says whether tables a party already holds still give it room after the plan changes.
   - `acceptsArrival` says whether a guest may arrive at a given local date and time, from the weekly hours and special days.
+  - `arrivalTimes` lists the times a guest can pick on a day, every 15 minutes, including windows that run past midnight.
 - `apps/api`: a [Fastify](https://fastify.dev/) API in TypeScript.
   - `GET /venues/:slug/floor-plan` returns the zones and tables, plus any problems the engine finds in the plan.
-  - `POST /venues/:slug/reservations` books a table. The engine picks the table (or tables), and how long it is kept depends on the party size. It answers `409` when nothing is free. See [limits on public bookings](#limits-on-public-bookings).
+  - `POST /venues/:slug/reservations` books a table. The engine picks the table (or tables), and how long it is kept depends on the party size. It answers `409` when nothing is free. With `zoneId` it only tries that zone and answers `409` with code `zone_full` when the zone is full. See [limits on public bookings](#limits-on-public-bookings).
   - `GET` and `PUT /venues/:slug/booking-rules` read and replace how far ahead guests may book and the opening hours.
+  - `GET /venues/:slug/booking-options` and `GET /venues/:slug/availability?date=&partySize=` feed the [booking page](#the-booking-page): the venue's name and languages, the zones guests may ask for, and which times of a day still have a table.
   - Floor plan editing: `POST /venues/:slug/zones`, `PATCH` and `DELETE /venues/:slug/zones/:zoneId`, `POST /venues/:slug/zones/:zoneId/tables`, `PATCH` and `DELETE /venues/:slug/tables/:tableId`. See [editing the plan](#editing-the-plan).
   - Staff sign-in: `POST /auth/login`, `POST /auth/logout` and `GET /auth/me`. See [staff accounts and sign-in](#staff-accounts-and-sign-in).
   - `GET /health` checks that the API can reach the database.
   - `GET /openapi.json` describes the API (OpenAPI 3.1).
-- `apps/web`: the [floor plan editor](#the-floor-plan-editor) for staff, in React and TypeScript, built with Vite. The API serves it at `/`.
+- `apps/web`: the [floor plan editor](#the-floor-plan-editor) for staff and the [booking page](#the-booking-page) for guests, in React and TypeScript, built with Vite as two pages. The API serves the editor at `/` and the booking page at `/reservar/<venue>`.
 - `npm run staff`: the command line that creates the first owner and manages staff accounts.
 - `db/migrations`: the schema, as plain SQL files. A small runner applies them in order, each in a transaction, behind a lock so two copies of the app can't migrate at the same time.
 - `db/seed/sample.sql`: a made-up venue to play with.
@@ -125,7 +127,7 @@ Guests book without an account. Staff sign in with their e-mail address and a pa
 
 ## Editing the plan
 
-Owners of a venue can add, change and remove its zones and tables through the API: position, size, shape, rotation, style, zone and whether the table can be booked online.
+Owners of a venue can add, change and remove its zones and tables through the API: position, size, shape, rotation, style, zone and whether the table can be booked online. Each zone also says whether guests may ask for it on the booking page (`guestSelectable`, on by default); a zone guests can't ask for, such as a private room, can still be given to a guest with no preference.
 
 - Every change is checked with `validateZone` against what is stored. A change that would make a table overlap another one, stick out of its zone or have impossible seats is refused with `422` and the list of problems. Problems the plan already had don't block unrelated edits.
 - Changes never leave an upcoming reservation without room. Taking away seats it needs, moving the tables it holds together apart, making one of them round or moving one of them to another zone is refused with `409`. A table booked on its own can still be moved, even to another zone: the party keeps it.
@@ -194,17 +196,32 @@ Booking needs no account, so the endpoint protects itself:
 
 - **Opening hours.** Each venue stores arrival windows: the first and the last time a guest may arrive, in the venue's own time zone, so 20:00 stays 20:00 when the clocks change. Windows repeat every week; a window can run past midnight (20:00 to 00:30). **Special days** (a holiday, a week off, a New Year's Eve dinner) replace the weekly hours of that date; a special day with no windows is closed. Bookings outside the hours get `422`. Arrival times count to the minute: 15:30:45 counts as 15:30. A venue that hasn't set any hours takes no online bookings.
 - **Horizon.** Guests can book from today up to `horizonDays` ahead (60 by default, at most 730), counted in the venue's calendar days. Further ahead gets `422`.
-- **One booking per guest at a time.** A second booking at the same venue with the same e-mail (any letter case) or the same phone (any spacing) that overlaps one the guest already holds gets `409`. That catches a double click on "Book" and one person taking several tables for the same evening. Simultaneous clicks queue up per guest, so exactly one gets through. Only the same e-mail or the same phone digits match: a guest who books once with an e-mail and once with only a phone, or writes the country code once and not the other time, is not caught. Contact details aren't verified yet, so someone who knows a guest's e-mail can book with it first; e-mail confirmation comes with the booking page.
+- **One booking per guest at a time.** A second booking at the same venue with the same e-mail (any letter case) or the same phone (any spacing) that overlaps one the guest already holds gets `409`. That catches a double click on "Book" and one person taking several tables for the same evening. Simultaneous clicks queue up per guest, so exactly one gets through. Only the same e-mail or the same phone digits match: a guest who books once with an e-mail and once with only a phone, or writes the country code once and not the other time, is not caught. Contact details aren't verified yet, so someone who knows a guest's e-mail can book with it first; e-mail confirmation comes with the staff screen and its notices.
+- **Availability.** `GET /venues/:slug/availability` allows 120 requests per address every 15 minutes, enough for a guest trying many days. A free time is a hint, not a promise: someone may book it first, and the booking itself still decides.
 - **Requests per address.** Each address can send 10 booking requests every 15 minutes (set with `BOOKING_RATE_LIMIT_MAX` and `BOOKING_RATE_LIMIT_WINDOW_MINUTES`); after that it gets `429` with `Retry-After`. Failed requests count too. An IPv6 `/64` counts as one address. The counts live in the API's memory, so each copy of the API counts on its own and a restart resets them. Guests behind one shared address (a mobile carrier, the venue's own Wi-Fi) share one limit. There is no cap per venue yet.
 - **Behind a proxy**, set `TRUST_PROXY` to the proxy's address (for example `127.0.0.1`). Otherwise every guest looks like the proxy and they all share one limit. `X-Forwarded-For` is only believed from the addresses listed there. With Docker Compose, the API sees the proxy through Docker's network (an address such as `172.17.0.1`), not as `127.0.0.1`: list that address or range instead.
 
 Owners set the rules with `PUT /venues/:slug/booking-rules`, which replaces them all at once. Bookings already made are kept even if they now fall outside the hours.
 
+## The booking page
+
+![The booking page of the made-up Sample Bistro, in Spanish: party size and zone (Terraza) at the top, a month calendar with closed days greyed out, the lunch times as buttons with 13:00 chosen, and a yellow box saying the terrace is full at 13:00, offering 14:30, 14:45 and 15:00 on the terrace or the dining room (Comedor) at 13:00.](docs/images/booking.png)
+
+Guests book at `/reservar/<venue>`, with no account:
+
+- **People, zone, day, time.** The zone list only shows the zones the venue lets guests ask for, plus "No preference"; with one zone or none it doesn't show at all. The calendar only lets guests pick days inside the horizon with opening hours, and times come from the API, so full times are struck through and can't be picked.
+- **When the zone is full**, its times already show with a dashed border; picking one, the page says so and offers the nearest times with room in that zone and the other zones with room at the same time. One click picks either. The booking then only tries that zone, so a guest who asked for the terrace never ends up inside without being asked.
+- **Only what the booking needs** (GDPR data minimisation): a name, an e-mail or a phone (one is enough), and an optional note. A short notice under the form says the venue uses the details only for this booking, never for advertising, and that guests can ask to see, correct or delete them.
+- **Spanish, English and Arabic**, picked at the top and remembered on the device. Arabic reads right to left: the layout, the calendar and its arrow keys all follow. The booking stores the guest's language when the venue offers it, for later messages.
+- **Accessible and made for phones.** The calendar is a grid of buttons with arrow keys; closed days and full times are still read out. Errors sit next to their fields and the first one gets focus. Labels are short; the longer explanations are read out by screen readers. Buttons are 28 px with a mouse and 44 px on a phone, and nothing depends on hovering.
+
+![The same page on a phone, in Arabic: everything reads from the right, with the venue's name on the right, the calendar's Monday column on the right and the chosen 13:00 at the right of the first row of times.](docs/images/booking-phone-ar.png)
+
 ## Roadmap
 
 1. ~~**Booking engine with no double bookings.**~~ Done.
 2. ~~**Floor plan editor.** API to edit zones and tables, checked by the engine, and the screen to draw them.~~ Done.
-3. **Public booking page.** Several languages (including right-to-left), suggests nearby times when the one asked for is full, GDPR-friendly.
+3. ~~**Public booking page.** Several languages (including right-to-left), suggests nearby times when the one asked for is full, GDPR-friendly.~~ Done.
 4. **Staff screen.** Today's service, confirm, cancel, seat, email notices.
 5. **Deployment guide.** Backups and running it for a real venue.
 

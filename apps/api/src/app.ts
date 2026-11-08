@@ -5,6 +5,7 @@ import type { Pool } from "./db.js";
 import { authRoutes, sessionSecurityScheme, type RateLimit } from "./routes/auth.js";
 import { bookingRulesRoutes } from "./routes/booking-rules.js";
 import { floorPlanRoutes } from "./routes/floor-plan.js";
+import { guestBookingRoutes, type AvailabilityRateLimit } from "./routes/guest-booking.js";
 import { healthRoutes } from "./routes/health.js";
 import { planEditorRoutes } from "./routes/plan-editor.js";
 import { reservationRoutes, type BookingRateLimit } from "./routes/reservations.js";
@@ -12,6 +13,11 @@ import { webRoutes } from "./routes/web.js";
 import { BusyError } from "./transaction.js";
 
 export const DEFAULT_BOOKING_RATE_LIMIT: BookingRateLimit = { max: 10, windowMs: 15 * 60_000 };
+/** Each change on the booking page (day, party size) asks once, so this leaves plenty of room. */
+export const DEFAULT_AVAILABILITY_RATE_LIMIT: AvailabilityRateLimit = {
+  max: 120,
+  windowMs: 15 * 60_000,
+};
 export const DEFAULT_LOGIN_RATE_LIMIT: RateLimit = { max: 30, windowMs: 15 * 60_000 };
 
 export interface AppOptions {
@@ -23,6 +29,7 @@ export interface AppOptions {
    */
   trustProxy?: FastifyServerOptions["trustProxy"];
   bookingRateLimit?: BookingRateLimit;
+  availabilityRateLimit?: AvailabilityRateLimit;
   /** Sign-in requests one address may send per window, on top of the limit per e-mail address. */
   loginRateLimit?: RateLimit;
   /** Sign-ins checking a password at the same time; more get 503. */
@@ -38,6 +45,7 @@ export async function buildApp({
   logger = false,
   trustProxy = false,
   bookingRateLimit = DEFAULT_BOOKING_RATE_LIMIT,
+  availabilityRateLimit = DEFAULT_AVAILABILITY_RATE_LIMIT,
   loginRateLimit = DEFAULT_LOGIN_RATE_LIMIT,
   maxConcurrentLogins,
   now = () => new Date(),
@@ -95,6 +103,7 @@ export async function buildApp({
   await app.register(planEditorRoutes, { pool, now });
   await app.register(bookingRulesRoutes, { pool, now });
   await app.register(reservationRoutes, { pool, now, rateLimit: bookingRateLimit });
+  await app.register(guestBookingRoutes, { pool, now, rateLimit: availabilityRateLimit });
 
   app.get("/openapi.json", { schema: { hide: true } }, () => app.swagger());
 

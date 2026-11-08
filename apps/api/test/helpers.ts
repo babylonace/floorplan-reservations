@@ -34,6 +34,7 @@ export const TEST_NOW = new Date("2030-05-20T10:00:00Z");
 export const TEST_APP_OPTIONS = {
   now: () => TEST_NOW,
   bookingRateLimit: { max: 100_000, windowMs: 60_000 },
+  availabilityRateLimit: { max: 100_000, windowMs: 60_000 },
   loginRateLimit: { max: 100_000, windowMs: 60_000 },
 } satisfies Partial<AppOptions>;
 

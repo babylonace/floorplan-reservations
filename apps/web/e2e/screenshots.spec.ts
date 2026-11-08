@@ -77,3 +77,54 @@ test.describe("on a phone", () => {
     await page.screenshot({ path: `${folder}editor-phone.png` });
   });
 });
+
+/** Picks next month's first open day and its first time on the booking page. */
+async function pickFirstTime(page: Page, nextMonth: string) {
+  await page.getByRole("button", { name: nextMonth }).click();
+  await page.locator(".calendar-day:not([aria-disabled])").first().click();
+  await page.locator(".slot:not([aria-disabled])").first().click();
+}
+
+test("booking page offering other times when the terrace is full", async ({ page, request }) => {
+  await page.goto("/reservar/sample-bistro");
+  await page.getByRole("button", { name: "Mes siguiente" }).click();
+  const date = await page
+    .locator(".calendar-day:not([aria-disabled])")
+    .first()
+    .getAttribute("data-date");
+  const times = await request.get(
+    `/venues/sample-bistro/availability?date=${date ?? ""}&partySize=2`,
+  );
+  const [first] = ((await times.json()) as { slots: { startsAt: string }[] }).slots;
+  // Two made-up guests take both terrace tables at the first time of that day.
+  for (const guest of ["one", "two"]) {
+    await request.post("/venues/sample-bistro/reservations", {
+      data: {
+        startsAt: first?.startsAt,
+        partySize: 2,
+        guestName: `Guest ${guest}`,
+        guestEmail: `${guest}@example.com`,
+        zoneId: "00000000-0000-4000-8000-000000000102",
+      },
+    });
+  }
+  await page.goto("/reservar/sample-bistro");
+  await page.getByLabel("Zona").selectOption({ label: "Terraza" });
+  await pickFirstTime(page, "Mes siguiente");
+  await page.getByText(/está completa/).waitFor();
+  await page.mouse.move(0, 0);
+  await page.screenshot({ path: `${folder}booking.png` });
+});
+
+test.describe("booking on a phone", () => {
+  test.use({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });
+
+  test("booking page in Arabic, right to left", async ({ page }) => {
+    await page.goto("/reservar/sample-bistro");
+    await page.getByRole("button", { name: "العربية" }).click();
+    await page.getByLabel("المنطقة").selectOption({ label: "Comedor" });
+    await pickFirstTime(page, "الشهر التالي");
+    await page.getByLabel("الاسم").waitFor();
+    await page.screenshot({ path: `${folder}booking-phone-ar.png` });
+  });
+});

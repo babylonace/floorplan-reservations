@@ -49,6 +49,13 @@ const createBody = {
       description: "Language for messages to the guest. Defaults to the venue's language.",
     },
     notes: { type: "string", maxLength: 500, pattern: NO_NUL },
+    zoneId: {
+      type: "string",
+      format: "uuid",
+      description:
+        "The zone the guest asked for (see booking-options). Only that zone is tried; when it " +
+        "is full the answer is 409 with code zone_full. Without it, any zone will do.",
+    },
   },
 } as const;
 
@@ -76,11 +83,34 @@ const reservationResponse = {
   },
 } as const;
 
+/** Stable names for why a booking was refused, so the booking page can say it in any language. */
+export const BOOKING_ERROR_CODES = [
+  "venue_not_found",
+  "invalid",
+  "language",
+  "too_big",
+  "beyond_horizon",
+  "closed",
+  "zone_not_offered",
+  "duplicate",
+  "no_table",
+  "zone_full",
+  "busy",
+] as const;
+type BookingErrorCode = (typeof BOOKING_ERROR_CODES)[number];
+
 const errorResponse = {
   type: "object",
   required: ["error"],
-  properties: { error: { type: "string" } },
+  properties: {
+    error: { type: "string" },
+    code: { type: "string", enum: [...BOOKING_ERROR_CODES] },
+  },
 } as const;
+
+function refusal(error: string, code: BookingErrorCode) {
+  return { error, code };
+}
 
 interface CreateBody {
   startsAt: string;
@@ -90,6 +120,7 @@ interface CreateBody {
   guestPhone?: string;
   locale?: string;
   notes?: string;
+  zoneId?: string;
 }
 
 interface VenueRow {
@@ -189,7 +220,10 @@ interface TableRow {
 }
 
 /** The venue's bookable tables, grouped by zone in the order staff set. */
-async function loadPlan(client: PoolClient, venueId: string): Promise<PlanZone[]> {
+export async function loadPlan(
+  client: Pick<PoolClient, "query">,
+  venueId: string,
+): Promise<PlanZone[]> {
   const { rows } = await client.query<TableRow>(
     `select t.id, t.zone_id, z.name as zone_name, z.width as zone_width, z.height as zone_height,
             t.label, t.min_seats, t.max_seats, t.shape, t.x, t.y, t.width, t.height, t.rotation,
@@ -273,9 +307,11 @@ async function bookBestTables(
           where venue_id = $1 and holds_tables and during && tstzrange($2, $3, '[)')`,
         [venueId, startsAt, endsAt],
       );
+      // A guest who asked for a zone is only offered that zone.
+      const asked = body.zoneId === undefined ? plan : plan.filter((z) => z.id === body.zoneId);
       const [best] = seatingOptions(
         body.partySize,
-        plan,
+        asked,
         new Set(busy.rows.map((row) => row.table_id)),
       );
       if (!best) return null;
@@ -394,25 +430,27 @@ export const reservationRoutes: FastifyPluginAsync<ReservationRouteOptions> = (
     async (request, reply) => {
       const body = request.body;
       if (!body.guestName.trim()) {
-        return reply.code(400).send({ error: "guestName must not be blank" });
+        return reply.code(400).send(refusal("guestName must not be blank", "invalid"));
       }
       if (body.guestPhone !== undefined && phoneDigits(body.guestPhone).length < 6) {
-        return reply.code(400).send({ error: "guestPhone needs at least 6 digits" });
+        return reply.code(400).send(refusal("guestPhone needs at least 6 digits", "invalid"));
       }
       const startsAt = new Date(body.startsAt);
       if (Number.isNaN(startsAt.getTime()) || !isRealDay(body.startsAt)) {
-        return reply.code(400).send({ error: "startsAt is not a valid date" });
+        return reply.code(400).send(refusal("startsAt is not a valid date", "invalid"));
       }
       const today = now();
       if (startsAt.getTime() <= today.getTime()) {
-        return reply.code(400).send({ error: "startsAt must be in the future" });
+        return reply.code(400).send(refusal("startsAt must be in the future", "invalid"));
       }
 
       const minutes = durationFor(body.partySize);
       if (minutes === null) {
         return reply
           .code(422)
-          .send({ error: "This party is too big to book online. Please contact the venue." });
+          .send(
+            refusal("This party is too big to book online. Please contact the venue.", "too_big"),
+          );
       }
       const endsAt = new Date(startsAt.getTime() + minutes * 60_000);
 
@@ -428,25 +466,44 @@ export const reservationRoutes: FastifyPluginAsync<ReservationRouteOptions> = (
       );
       const venue = venueResult.rows[0];
       if (!venue) {
-        return reply.code(404).send({ error: "Venue not found" });
+        return reply.code(404).send(refusal("Venue not found", "venue_not_found"));
       }
 
       const locale = body.locale ?? venue.default_locale;
       if (!venue.locales.includes(locale)) {
-        return reply.code(400).send({ error: "This venue does not offer that language" });
+        return reply.code(400).send(refusal("This venue does not offer that language", "language"));
       }
 
       if (venue.days_ahead > venue.booking_horizon_days) {
-        return reply.code(422).send({
-          error: `This venue takes bookings up to ${String(venue.booking_horizon_days)} days ahead`,
-        });
+        return reply
+          .code(422)
+          .send(
+            refusal(
+              `This venue takes bookings up to ${String(venue.booking_horizon_days)} days ahead`,
+              "beyond_horizon",
+            ),
+          );
       }
       const hours = await loadOpeningHours(pool, venue.id, [
         venue.local_date,
         previousDay(venue.local_date),
       ]);
       if (!acceptsArrival(hours, venue.local_date, venue.local_time)) {
-        return reply.code(422).send({ error: "The venue does not take bookings at that time" });
+        return reply
+          .code(422)
+          .send(refusal("The venue does not take bookings at that time", "closed"));
+      }
+      if (body.zoneId !== undefined) {
+        const zone = await pool.query(
+          `select 1 from zones
+            where id = $1 and venue_id = $2 and guest_selectable and retired_at is null`,
+          [body.zoneId, venue.id],
+        );
+        if (zone.rows.length === 0) {
+          return reply
+            .code(422)
+            .send(refusal("Guests cannot ask for that zone at this venue", "zone_not_offered"));
+        }
       }
 
       const client = await pool.connect();
@@ -468,7 +525,7 @@ export const reservationRoutes: FastifyPluginAsync<ReservationRouteOptions> = (
           return reply
             .code(503)
             .header("retry-after", "5")
-            .send({ error: "Too busy right now. Please try again in a few seconds." });
+            .send(refusal("Too busy right now. Please try again in a few seconds.", "busy"));
         }
         throw error;
       }
@@ -476,10 +533,17 @@ export const reservationRoutes: FastifyPluginAsync<ReservationRouteOptions> = (
       if (booking === "duplicate") {
         return reply
           .code(409)
-          .send({ error: "You already have a booking at this venue around that time" });
+          .send(refusal("You already have a booking at this venue around that time", "duplicate"));
+      }
+      if (!booking && body.zoneId !== undefined) {
+        return reply
+          .code(409)
+          .send(refusal("That zone has no free table for that party at that time", "zone_full"));
       }
       if (!booking) {
-        return reply.code(409).send({ error: "No table is free for that party at that time" });
+        return reply
+          .code(409)
+          .send(refusal("No table is free for that party at that time", "no_table"));
       }
 
       return reply.code(201).send({

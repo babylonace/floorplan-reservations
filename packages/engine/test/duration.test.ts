@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { durationFor } from "../src/index.js";
+import { durationFor, largestParty } from "../src/index.js";
 
 describe("durationFor", () => {
   it("uses the smallest rule that fits the party", () => {
@@ -25,5 +25,13 @@ describe("durationFor", () => {
   it("rejects party sizes that make no sense", () => {
     expect(() => durationFor(0)).toThrow(RangeError);
     expect(() => durationFor(2.5)).toThrow(RangeError);
+  });
+});
+
+describe("largestParty", () => {
+  it("is the party size the last rule covers", () => {
+    expect(largestParty()).toBe(12);
+    expect(largestParty([{ upToPartySize: 3, minutes: 60 }])).toBe(3);
+    expect(largestParty([])).toBe(0);
   });
 });

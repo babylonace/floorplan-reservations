@@ -330,6 +330,7 @@ export function Workspace({
                   width: 1000,
                   height: 800,
                   sortOrder: Math.max(-1, ...zones.map((candidate) => candidate.sortOrder)) + 1,
+                  guestSelectable: true,
                 }}
                 submitLabel={t.zones.create}
                 busyLabel={t.zones.creating}

@@ -44,15 +44,22 @@ function planRatio(zone: { width: number; height: number }): number {
 }
 
 function fieldsOf(zone: PlanZone): ZoneFields {
-  return { name: zone.name, width: zone.width, height: zone.height, sortOrder: zone.sortOrder };
+  return {
+    name: zone.name,
+    width: zone.width,
+    height: zone.height,
+    sortOrder: zone.sortOrder,
+    guestSelectable: zone.guestSelectable,
+  };
 }
 
-/** Whether the typed name or size differ from the stored zone. */
+/** Whether the typed name, size or guest choice differ from the stored zone. */
 function zoneDiffers(fields: ZoneFields, zone: ZoneFields): boolean {
   return (
     fields.name.trim() !== zone.name.trim() ||
     fields.width !== zone.width ||
-    fields.height !== zone.height
+    fields.height !== zone.height ||
+    fields.guestSelectable !== zone.guestSelectable
   );
 }
 

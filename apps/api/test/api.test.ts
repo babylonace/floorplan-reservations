@@ -58,7 +58,7 @@ describe("GET /venues/:slug/floor-plan", () => {
     expect(body.venue).toMatchObject({
       slug: "sample-bistro",
       defaultLocale: "es",
-      locales: ["es", "en", "fr"],
+      locales: ["es", "en", "ar"],
     });
     expect(body.zones.map((zone) => zone.name)).toEqual(["Comedor", "Terraza"]);
     expect(body.zones[0]?.tables.map((table) => table.label)).toEqual(["1", "2", "3", "4"]);
@@ -141,6 +141,8 @@ describe("GET /openapi.json", () => {
       "/auth/logout",
       "/auth/me",
       "/health",
+      "/venues/{slug}/availability",
+      "/venues/{slug}/booking-options",
       "/venues/{slug}/booking-rules",
       "/venues/{slug}/floor-plan",
       "/venues/{slug}/reservations",

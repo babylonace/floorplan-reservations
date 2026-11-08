@@ -29,6 +29,8 @@ export interface Zone {
   sortOrder: number;
   width: number;
   height: number;
+  /** Guests may ask for this zone on the public booking page. */
+  guestSelectable: boolean;
 }
 
 export interface PlanZone extends Zone {
@@ -45,3 +47,63 @@ export type ZoneFields = Omit<Zone, "id">;
 
 /** Everything about a table that can be saved; `zoneId` moves it to another zone. */
 export type TableFields = Omit<Table, "id">;
+
+/** The public booking page. */
+
+export interface BookingOptions {
+  name: string;
+  timeZone: string;
+  defaultLocale: string;
+  /** Languages the venue writes to guests in. */
+  locales: string[];
+  /** Bigger groups have to contact the venue. */
+  largestParty: number;
+  /** Zones a guest may ask for. */
+  zones: { id: string; name: string }[];
+}
+
+export interface ArrivalWindow {
+  firstArrival: string;
+  lastArrival: string;
+}
+
+export interface BookingRules {
+  horizonDays: number;
+  weekly: (ArrivalWindow & { weekday: number })[];
+  specialDays: { date: string; windows: ArrivalWindow[] }[];
+}
+
+export interface Slot {
+  /** Local time, HH:MM. */
+  time: string;
+  startsAt: string;
+  /** Some table is free, in any zone. */
+  available: boolean;
+  /** Zones a guest may ask for that have room at this time. */
+  zoneIds: string[];
+}
+
+export interface Availability {
+  date: string;
+  slots: Slot[];
+}
+
+export interface BookingRequest {
+  startsAt: string;
+  partySize: number;
+  guestName: string;
+  guestEmail?: string;
+  guestPhone?: string;
+  locale?: string;
+  notes?: string;
+  zoneId?: string;
+}
+
+export interface Booking {
+  id: string;
+  status: string;
+  startsAt: string;
+  endsAt: string;
+  partySize: number;
+  tables: { id: string; label: string; zoneId: string }[];
+}

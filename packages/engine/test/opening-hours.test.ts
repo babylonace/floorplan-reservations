@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   acceptsArrival,
+  arrivalTimes,
   isoWeekday,
+  nextDay,
   previousDay,
   windowsOn,
   type OpeningHours,
@@ -117,5 +119,54 @@ describe("acceptsArrival", () => {
 
   it("is closed everywhere when there are no hours at all", () => {
     expect(acceptsArrival({ weekly: [], specialDays: [] }, SATURDAY, "20:00")).toBe(false);
+  });
+});
+
+describe("arrivalTimes", () => {
+  const hours: OpeningHours = {
+    weekly: [
+      { weekday: 6, firstArrival: "13:00", lastArrival: "14:00" },
+      { weekday: 6, firstArrival: "23:00", lastArrival: "00:30" },
+      { weekday: 6, firstArrival: "13:30", lastArrival: "13:45" },
+    ],
+    specialDays: [{ date: "2030-06-08", windows: [] }],
+  };
+
+  it("lists every step of each window, sorted and without repeats", () => {
+    expect(arrivalTimes(hours, SATURDAY, 30).map((slot) => slot.time)).toEqual([
+      "13:00",
+      "13:30",
+      "14:00",
+      "23:00",
+      "23:30",
+      "00:00",
+      "00:30",
+    ]);
+    expect(arrivalTimes(hours, SATURDAY, 15).filter((slot) => slot.time === "13:45")).toHaveLength(
+      1,
+    );
+  });
+
+  it("dates the times past midnight on the next day", () => {
+    const late = arrivalTimes(hours, SATURDAY, 30).slice(-2);
+    expect(late).toEqual([
+      { date: SUNDAY, time: "00:00" },
+      { date: SUNDAY, time: "00:30" },
+    ]);
+    // The early hours belong to Saturday's list, not to Sunday's.
+    expect(arrivalTimes(hours, SUNDAY)).toEqual([]);
+  });
+
+  it("lists nothing on a closed special day", () => {
+    expect(arrivalTimes(hours, "2030-06-08")).toEqual([]);
+  });
+
+  it("refuses a step that is not a whole number of minutes", () => {
+    expect(() => arrivalTimes(hours, SATURDAY, 0)).toThrow(RangeError);
+  });
+
+  it("goes to the next day across months and years", () => {
+    expect(nextDay("2030-12-31")).toBe("2031-01-01");
+    expect(nextDay("2032-02-28")).toBe("2032-02-29");
   });
 });
