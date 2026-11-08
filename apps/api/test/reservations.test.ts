@@ -2,7 +2,14 @@ import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { createPool } from "../src/db.js";
-import { createVenue, deleteVenue, testDatabaseUrl, type TestTable } from "./helpers.js";
+import {
+  createVenue,
+  deleteVenue,
+  newGuestEmail,
+  TEST_APP_OPTIONS,
+  testDatabaseUrl,
+  type TestTable,
+} from "./helpers.js";
 
 interface Created {
   id: string;
@@ -19,7 +26,7 @@ let app: FastifyInstance;
 const slugs: string[] = [];
 
 beforeAll(async () => {
-  app = await buildApp({ pool });
+  app = await buildApp({ pool, ...TEST_APP_OPTIONS });
   // Open every connection up front. Otherwise the first requests of a burst wait for new
   // connections one by one and no longer arrive at the same time.
   const clients = await Promise.all(Array.from({ length: 30 }, () => pool.connect()));
@@ -44,7 +51,7 @@ function book(slug: string, body: Record<string, unknown>) {
   return app.inject({
     method: "POST",
     url: `/venues/${slug}/reservations`,
-    payload: { guestName: "Test Guest", guestEmail: "guest@example.com", ...body },
+    payload: { guestName: "Test Guest", guestEmail: newGuestEmail(), ...body },
   });
 }
 
@@ -337,4 +344,265 @@ describe("many bookings at once", { timeout: 20_000 }, () => {
     // checked each other at the same instant. Either way nothing was double-booked.
     expect(results.filter((result) => result === "23P01" || result === "40P01")).toHaveLength(9);
   }, 30_000);
+
+  it("books a double click only once", async () => {
+    await venueWith(
+      "rush-double-click",
+      Array.from({ length: 10 }, (_, i) => ({ label: String(i + 1), x: 100 + i * 150 })),
+    );
+
+    // Ten copies of the same request: same guest, same time. There are tables for all of them.
+    const responses = await allAtOnce(10, () =>
+      book("rush-double-click", {
+        startsAt: EIGHT_PM,
+        partySize: 2,
+        guestEmail: "double@example.com",
+      }),
+    );
+
+    expect(responses.filter((response) => response.statusCode === 201)).toHaveLength(1);
+    const refused = responses.filter((response) => response.statusCode === 409);
+    expect(refused).toHaveLength(9);
+    for (const response of refused) {
+      expect(response.json<{ error: string }>().error).toMatch(/already have a booking/);
+    }
+  });
+});
+
+describe("limits on the public booking endpoint", () => {
+  function setRules(slug: string, rules: Record<string, unknown>) {
+    return app.inject({
+      method: "PUT",
+      url: `/venues/${slug}/booking-rules`,
+      payload: { horizonDays: 60, weekly: [], specialDays: [], ...rules },
+    });
+  }
+
+  it("takes bookings up to the venue's horizon, counted in its own days", async () => {
+    await venueWith("guard-horizon", [{ label: "1", x: 100 }]);
+
+    // "Now" is 2030-05-20 at 12:00 in Madrid. Sixty days ahead is 19 July.
+    const lastDay = await book("guard-horizon", {
+      startsAt: "2030-07-19T23:00:00+02:00",
+      partySize: 2,
+    });
+    expect(lastDay.statusCode).toBe(201);
+    const tooFar = await book("guard-horizon", {
+      startsAt: "2030-07-20T13:00:00+02:00",
+      partySize: 2,
+    });
+    expect(tooFar.statusCode).toBe(422);
+    expect(tooFar.json<{ error: string }>().error).toMatch(/60 days ahead/);
+
+    // Half past midnight in Madrid is still the evening before in UTC. Days count in Madrid.
+    await setRules("guard-horizon", {
+      horizonDays: 1,
+      weekly: [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({
+        weekday,
+        firstArrival: "00:00",
+        lastArrival: "23:59",
+      })),
+    });
+    const lateApp = await buildApp({
+      pool,
+      ...TEST_APP_OPTIONS,
+      now: () => new Date("2030-05-20T22:30:00Z"),
+    });
+    try {
+      const tomorrow = await lateApp.inject({
+        method: "POST",
+        url: "/venues/guard-horizon/reservations",
+        payload: {
+          guestName: "Test Guest",
+          guestEmail: newGuestEmail(),
+          startsAt: "2030-05-22T20:00:00+02:00",
+          partySize: 2,
+        },
+      });
+      expect(tomorrow.statusCode).toBe(201);
+    } finally {
+      await lateApp.close();
+    }
+  });
+
+  it("only takes arrivals inside the opening hours, in the venue's local time", async () => {
+    await venueWith("guard-hours", [{ label: "1", x: 100 }]);
+    const response = await setRules("guard-hours", {
+      horizonDays: 365,
+      weekly: [
+        // Saturday lunch, and a Saturday dinner that runs past midnight.
+        { weekday: 6, firstArrival: "13:00", lastArrival: "15:30" },
+        { weekday: 6, firstArrival: "20:00", lastArrival: "00:30" },
+        { weekday: 7, firstArrival: "20:00", lastArrival: "20:00" },
+      ],
+      specialDays: [{ date: "2030-06-08", windows: [] }],
+    });
+    expect(response.statusCode).toBe(204);
+
+    const at = async (startsAt: string) =>
+      (await book("guard-hours", { startsAt, partySize: 2 })).statusCode;
+
+    // Saturday 1 June 2030.
+    expect(await at("2030-06-01T13:00:00+02:00")).toBe(201);
+    expect(await at("2030-06-01T17:00:00+02:00")).toBe(422);
+    expect(await at("2030-06-01T15:31:00+02:00")).toBe(422);
+    // Saturday's late window, after midnight on Sunday.
+    expect(await at("2030-06-02T00:15:00+02:00")).toBe(201);
+    expect(await at("2030-06-02T00:45:00+02:00")).toBe(422);
+    // A Saturday listed as a special day with no windows is closed.
+    expect(await at("2030-06-08T13:00:00+02:00")).toBe(422);
+    // Monday has no windows.
+    expect(await at("2030-06-03T13:00:00+02:00")).toBe(422);
+
+    // 20:00 in Madrid is 18:00 UTC in summer and 19:00 UTC in winter. The window follows the
+    // clock on the wall; summer time ends on 27 October 2030.
+    expect(await at("2030-06-02T18:00:00Z")).toBe(201);
+    expect(await at("2030-10-27T19:00:00Z")).toBe(201);
+    expect(await at("2030-10-27T18:00:00Z")).toBe(422);
+  });
+
+  it("takes no bookings at a venue that has not set its hours", async () => {
+    const { venueId } = await venueWith("guard-no-hours", [{ label: "1", x: 100 }]);
+    await pool.query("delete from opening_hours where venue_id = $1", [venueId]);
+    const response = await book("guard-no-hours", { startsAt: EIGHT_PM, partySize: 2 });
+    expect(response.statusCode).toBe(422);
+  });
+
+  it("does not let the same guest book twice around the same time", async () => {
+    const { venueId } = await venueWith(
+      "guard-duplicate",
+      Array.from({ length: 5 }, (_, i) => ({ label: String(i + 1), x: 100 + i * 150 })),
+    );
+    const guest = { partySize: 2, guestEmail: "Ana@Example.com", guestPhone: "+34 600 111 222" };
+
+    const first = await book("guard-duplicate", { ...guest, startsAt: EIGHT_PM });
+    expect(first.statusCode).toBe(201);
+
+    // The same e-mail in other letters, at the same time.
+    const sameEmail = await book("guard-duplicate", {
+      startsAt: EIGHT_PM,
+      partySize: 4,
+      guestEmail: "ana@example.com",
+    });
+    expect(sameEmail.statusCode).toBe(409);
+
+    // The same phone written another way, half an hour later: the bookings would overlap.
+    const samePhone = await app.inject({
+      method: "POST",
+      url: "/venues/guard-duplicate/reservations",
+      payload: {
+        guestName: "Ana",
+        guestPhone: "+34600111222",
+        startsAt: "2030-06-01T20:30:00+02:00",
+        partySize: 2,
+      },
+    });
+    expect(samePhone.statusCode).toBe(409);
+
+    // Once the first booking is over, the same guest can come back.
+    const later = await book("guard-duplicate", {
+      ...guest,
+      startsAt: "2030-06-01T21:30:00+02:00",
+    });
+    expect(later.statusCode).toBe(201);
+
+    // Another guest at the first time is fine.
+    const other = await book("guard-duplicate", { startsAt: EIGHT_PM, partySize: 2 });
+    expect(other.statusCode).toBe(201);
+
+    // A cancelled booking no longer counts.
+    await pool.query(
+      "update reservations set status = 'cancelled' where venue_id = $1 and starts_at = $2 and guest_email = $3",
+      [venueId, EIGHT_PM, "Ana@Example.com"],
+    );
+    const again = await book("guard-duplicate", { ...guest, startsAt: EIGHT_PM });
+    expect(again.statusCode).toBe(201);
+  });
+
+  it("refuses a phone number with fewer than six digits", async () => {
+    await venueWith("guard-phone", [{ label: "1", x: 100 }]);
+    const response = await app.inject({
+      method: "POST",
+      url: "/venues/guard-phone/reservations",
+      payload: { guestName: "Ana", guestPhone: "(12) - 34", startsAt: EIGHT_PM, partySize: 2 },
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  describe("requests per address", () => {
+    let limited: FastifyInstance;
+
+    beforeAll(async () => {
+      limited = await buildApp({
+        pool,
+        ...TEST_APP_OPTIONS,
+        bookingRateLimit: { max: 3, windowMs: 60_000 },
+        trustProxy: "127.0.0.1",
+      });
+    });
+
+    afterAll(async () => {
+      await limited.close();
+    });
+
+    function bookFrom(remoteAddress: string, headers: Record<string, string> = {}) {
+      return limited.inject({
+        method: "POST",
+        url: "/venues/does-not-exist/reservations",
+        remoteAddress,
+        headers,
+        payload: {
+          guestName: "Test Guest",
+          guestEmail: newGuestEmail(),
+          startsAt: EIGHT_PM,
+          partySize: 2,
+        },
+      });
+    }
+
+    it("answers 429 once one address has used up its requests, and only to that address", async () => {
+      for (let i = 0; i < 3; i++) {
+        // Requests count even when they fail: here the venue does not exist.
+        expect((await bookFrom("203.0.113.7")).statusCode).toBe(404);
+      }
+      const blocked = await bookFrom("203.0.113.7");
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.headers["retry-after"]).toBeDefined();
+      expect(blocked.json<{ error: string }>().error).toMatch(/Too many requests/);
+
+      expect((await bookFrom("203.0.113.8")).statusCode).toBe(404);
+
+      // Reading the floor plan is not limited.
+      const plan = await limited.inject({
+        method: "GET",
+        url: "/venues/sample-bistro/floor-plan",
+        remoteAddress: "203.0.113.7",
+      });
+      expect(plan.statusCode).toBe(200);
+    });
+
+    it("counts a whole IPv6 /64 as one address", async () => {
+      for (let i = 1; i <= 3; i++) await bookFrom(`2001:db8:1:2::${String(i)}`);
+      expect((await bookFrom("2001:db8:1:2:ffff::9")).statusCode).toBe(429);
+      expect((await bookFrom("2001:db8:1:3::1")).statusCode).toBe(404);
+    });
+
+    it("believes X-Forwarded-For only from the trusted proxy", async () => {
+      // Through the trusted proxy: each guest address gets its own count.
+      for (let i = 0; i < 3; i++) {
+        await bookFrom("127.0.0.1", { "x-forwarded-for": "198.51.100.1" });
+      }
+      const viaProxy = await bookFrom("127.0.0.1", { "x-forwarded-for": "198.51.100.1" });
+      expect(viaProxy.statusCode).toBe(429);
+      const otherGuest = await bookFrom("127.0.0.1", { "x-forwarded-for": "198.51.100.2" });
+      expect(otherGuest.statusCode).toBe(404);
+
+      // From anywhere else the header is ignored, so making up addresses does not help.
+      for (let i = 0; i < 3; i++) {
+        await bookFrom("192.0.2.50", { "x-forwarded-for": `198.51.100.${String(10 + i)}` });
+      }
+      const madeUp = await bookFrom("192.0.2.50", { "x-forwarded-for": "198.51.100.99" });
+      expect(madeUp.statusCode).toBe(429);
+    });
+  });
 });

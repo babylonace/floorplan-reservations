@@ -2,7 +2,14 @@ import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { createPool } from "../src/db.js";
-import { createVenue, deleteVenue, testDatabaseUrl, type TestTable } from "./helpers.js";
+import {
+  createVenue,
+  deleteVenue,
+  newGuestEmail,
+  TEST_APP_OPTIONS,
+  testDatabaseUrl,
+  type TestTable,
+} from "./helpers.js";
 
 interface ApiTable {
   id: string;
@@ -42,7 +49,7 @@ let app: FastifyInstance;
 const slugs: string[] = [];
 
 beforeAll(async () => {
-  app = await buildApp({ pool });
+  app = await buildApp({ pool, ...TEST_APP_OPTIONS });
 });
 
 afterEach(async () => {
@@ -81,7 +88,7 @@ function book(slug: string, partySize: number, startsAt = "2030-06-01T20:00:00+0
     startsAt,
     partySize,
     guestName: "Test Guest",
-    guestEmail: "guest@example.com",
+    guestEmail: newGuestEmail(),
   });
 }
 

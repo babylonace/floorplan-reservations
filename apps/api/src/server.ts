@@ -5,7 +5,12 @@ import { createPool } from "./db.js";
 loadDotEnvIfPresent();
 const config = loadConfig();
 const pool = createPool(config.databaseUrl);
-const app = await buildApp({ pool, logger: { level: config.logLevel } });
+const app = await buildApp({
+  pool,
+  logger: { level: config.logLevel },
+  trustProxy: config.trustProxy,
+  bookingRateLimit: config.bookingRateLimit,
+});
 
 app.addHook("onClose", async () => {
   await pool.end();

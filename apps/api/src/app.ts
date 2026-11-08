@@ -1,19 +1,37 @@
+import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import type { Pool } from "./db.js";
+import { bookingRulesRoutes } from "./routes/booking-rules.js";
 import { floorPlanRoutes } from "./routes/floor-plan.js";
 import { healthRoutes } from "./routes/health.js";
 import { planEditorRoutes } from "./routes/plan-editor.js";
-import { reservationRoutes } from "./routes/reservations.js";
+import { reservationRoutes, type BookingRateLimit } from "./routes/reservations.js";
 import { BusyError } from "./transaction.js";
+
+export const DEFAULT_BOOKING_RATE_LIMIT: BookingRateLimit = { max: 10, windowMs: 15 * 60_000 };
 
 export interface AppOptions {
   pool: Pool;
   logger?: FastifyServerOptions["logger"];
+  /**
+   * Which proxies to believe about the caller's address. Behind a reverse proxy, leaving this
+   * off makes every guest share the proxy's address, and so one rate limit.
+   */
+  trustProxy?: FastifyServerOptions["trustProxy"];
+  bookingRateLimit?: BookingRateLimit;
+  /** The current time. Tests set it; everyone else gets the clock. */
+  now?: () => Date;
 }
 
-export async function buildApp({ pool, logger = false }: AppOptions): Promise<FastifyInstance> {
-  const app = Fastify({ logger });
+export async function buildApp({
+  pool,
+  logger = false,
+  trustProxy = false,
+  bookingRateLimit = DEFAULT_BOOKING_RATE_LIMIT,
+  now = () => new Date(),
+}: AppOptions): Promise<FastifyInstance> {
+  const app = Fastify({ logger, trustProxy });
 
   // Server errors are logged in full but answered with a generic message, so database
   // details (hosts, table names) never reach the caller.
@@ -43,10 +61,21 @@ export async function buildApp({ pool, logger = false }: AppOptions): Promise<Fa
     },
   });
 
+  // Only routes that ask for it are limited (see the booking route). Counts live in this
+  // process's memory: with several copies of the API, each one counts on its own.
+  await app.register(rateLimit, {
+    global: false,
+    errorResponseBuilder: (_request, context) =>
+      Object.assign(new Error(`Too many requests. Please try again in ${context.after}.`), {
+        statusCode: context.statusCode,
+      }),
+  });
+
   await app.register(healthRoutes, { pool });
   await app.register(floorPlanRoutes, { pool });
   await app.register(planEditorRoutes, { pool });
-  await app.register(reservationRoutes, { pool });
+  await app.register(bookingRulesRoutes, { pool });
+  await app.register(reservationRoutes, { pool, now, rateLimit: bookingRateLimit });
 
   app.get("/openapi.json", { schema: { hide: true } }, () => app.swagger());
 
