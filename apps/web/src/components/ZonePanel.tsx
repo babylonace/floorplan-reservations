@@ -60,6 +60,7 @@ export function ZoneForm({
         <div className="field-row">
           <MetreField
             label={t.zones.width}
+            hint={t.zones.sizeHint}
             step={10}
             value={fields.width}
             min={1}
@@ -71,6 +72,7 @@ export function ZoneForm({
           />
           <MetreField
             label={t.zones.height}
+            hint={t.zones.sizeHint}
             step={10}
             value={fields.height}
             min={1}
@@ -81,7 +83,6 @@ export function ZoneForm({
             }}
           />
         </div>
-        <p className="field-hint">{t.zones.sizeHint}</p>
         <NumberField
           label={t.zones.sortOrder}
           hint={t.zones.sortOrderHint}
@@ -141,7 +142,6 @@ export function ZonePanel({
           <span>{t.zones.tablesCount(tableCount)}</span>
         </span>
       </div>
-      <p className="panel-hint">{t.tables.noSelection}</p>
       {editable && (
         <>
           <ZoneForm

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { TABLE_SIDES, type TableSide } from "@floorplan-reservations/engine";
 import { ApiError, type Api } from "../src/api/client";
 import { contrastRatio, tableColor, TABLE_COLORS, textOn } from "../src/plan/colors";
 import {
@@ -20,6 +21,10 @@ import {
   normalizeRotation,
   rotationFromHandle,
   shareSeats,
+  chairLayout,
+  CHAIR_GAP,
+  CHAIR_RADIUS,
+  MAX_CHAIRS_DRAWN,
   sizeFromHandle,
   snap,
   toTableFrame,
@@ -345,5 +350,123 @@ describe("bars", () => {
     expect(shareSeats(5, [200, 100])).toEqual([3, 2]);
     expect(shareSeats(3, [100, 100])).toEqual([2, 1]);
     expect(shareSeats(4, [])).toEqual([]);
+    expect(shareSeats(0, [100, 100])).toEqual([0, 0]);
+  });
+
+  it("never leaves a side chosen for seats without a chair (mesas#16)", () => {
+    // A long, narrow table with seats on its right (150 cm) and bottom (30 cm), 3 seats:
+    // shared by length alone the bottom got none.
+    expect(shareSeats(3, [150, 30])).toEqual([2, 1]);
+    // Fewer seats than sides: the longest sides get them.
+    expect(shareSeats(2, [80, 120, 80, 120])).toEqual([0, 1, 0, 1]);
+    expect(shareSeats(1, [80, 80, 120])).toEqual([0, 0, 1]);
+  });
+});
+
+describe("chair layout", () => {
+  const sideOf = (chair: { x: number; y: number }, width: number, height: number): string => {
+    if (chair.y < -height / 2) return "top";
+    if (chair.y > height / 2) return "bottom";
+    if (chair.x < -width / 2) return "left";
+    return "right";
+  };
+  const sideSets: TableSide[][] = [];
+  for (let mask = 1; mask < 16; mask++) {
+    sideSets.push(TABLE_SIDES.filter((_, index) => (mask >> index) % 2 === 1));
+  }
+
+  it("draws the seats of a table with seats on its right and bottom (mesas#16)", () => {
+    for (const [width, height] of [
+      [120, 80],
+      [80, 120],
+      [40, 200],
+      [200, 40],
+    ] as const) {
+      const { chairs } = chairLayout({
+        shape: "rect",
+        width,
+        height,
+        maxSeats: 3,
+        seatSides: ["right", "bottom"],
+      });
+      const sides = chairs.map((chair) => sideOf(chair, width, height));
+      expect(sides).toHaveLength(3);
+      expect(sides).toContain("right");
+      expect(sides).toContain("bottom");
+    }
+  });
+
+  it("puts one chair per seat, only on the chosen sides, each side with at least one", () => {
+    for (const sides of sideSets) {
+      for (let seats = 1; seats <= 18; seats++) {
+        for (const [width, height] of [
+          [30, 30],
+          [120, 80],
+          [50, 300],
+          [400, 40],
+        ] as const) {
+          const { chairs, radius } = chairLayout({
+            shape: "rect",
+            width,
+            height,
+            maxSeats: seats,
+            seatSides: sides,
+          });
+          expect(chairs).toHaveLength(Math.min(seats, MAX_CHAIRS_DRAWN));
+          const used = new Set(chairs.map((chair) => sideOf(chair, width, height)));
+          for (const side of used) expect(sides).toContain(side);
+          if (seats >= sides.length) expect(used.size).toBe(sides.length);
+          // Outside the table, clear of its edge.
+          for (const chair of chairs) {
+            const outX = Math.abs(chair.x) - width / 2;
+            const outY = Math.abs(chair.y) - height / 2;
+            expect(Math.max(outX, outY)).toBeGreaterThanOrEqual(radius);
+          }
+        }
+      }
+    }
+  });
+
+  it("keeps chairs from overlapping on a side when there is room for them", () => {
+    const { chairs, radius } = chairLayout({
+      shape: "rect",
+      width: 120,
+      height: 80,
+      maxSeats: 8,
+      seatSides: ["top", "bottom"],
+    });
+    const top = chairs.filter((chair) => chair.y < 0).map((chair) => chair.x);
+    expect(top).toHaveLength(4);
+    for (let i = 1; i < top.length; i++) {
+      expect((top[i] ?? 0) - (top[i - 1] ?? 0)).toBeGreaterThan(2 * radius);
+    }
+  });
+
+  it("goes all round a round table and along the long sides of any other", () => {
+    const round = chairLayout({
+      shape: "round",
+      width: 90,
+      height: 90,
+      maxSeats: 6,
+      seatSides: null,
+    });
+    expect(round.chairs).toHaveLength(6);
+    for (const chair of round.chairs) {
+      expect(Math.hypot(chair.x, chair.y)).toBeCloseTo(45 + CHAIR_GAP + CHAIR_RADIUS);
+    }
+    const tall = chairLayout({
+      shape: "rect",
+      width: 80,
+      height: 160,
+      maxSeats: 5,
+      seatSides: null,
+    });
+    expect(tall.chairs.map((chair) => sideOf(chair, 80, 160))).toEqual([
+      "left",
+      "left",
+      "left",
+      "right",
+      "right",
+    ]);
   });
 });
