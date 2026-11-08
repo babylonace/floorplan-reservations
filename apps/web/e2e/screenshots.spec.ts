@@ -50,6 +50,15 @@ test("a bar in sections, with stools on one side", async ({ page }) => {
   await page.screenshot({ path: `${folder}editor-bar.png` });
 });
 
+test("zoomed in on two tables", async ({ page }) => {
+  await signIn(page);
+  const zoomIn = page.getByRole("button", { name: "Acercar" });
+  for (let i = 0; i < 3; i++) await zoomIn.click();
+  await page.getByRole("button", { name: /^Mesa 1,/ }).focus();
+  await page.mouse.move(0, 0);
+  await page.screenshot({ path: `${folder}editor-zoom.png` });
+});
+
 test.describe("on a tablet", () => {
   test.use({ viewport: { width: 768, height: 1024 }, hasTouch: true, isMobile: true });
 

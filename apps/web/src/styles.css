@@ -843,8 +843,9 @@ fieldset {
   display: block;
   width: 100%;
   height: 100%;
-  /* A finger on the free space scrolls the page; on a table it drags it (see PlanCanvas). */
-  touch-action: manipulation;
+  /* A finger on the free space scrolls the page; on a table it drags it, and two fingers zoom
+     the plan (see PlanCanvas). Zoomed in, one finger moves around the plan instead. */
+  touch-action: pan-x pan-y;
   user-select: none;
 }
 
@@ -1113,6 +1114,60 @@ fieldset {
 
 .shortcuts {
   position: relative;
+}
+
+.plan-svg.is-zoomed {
+  touch-action: none;
+  cursor: grab;
+}
+
+.plan-svg.is-zoomed:active {
+  cursor: grabbing;
+}
+
+.zoom-controls {
+  display: flex;
+  border-radius: var(--radius-small);
+  box-shadow: 0 1px 3px rgb(23 33 30 / 25%);
+}
+
+.zoom-button {
+  width: 2rem;
+  padding: 0;
+  justify-content: center;
+}
+
+.zoom-controls .zoom-button:not(:first-child) {
+  margin-inline-start: -1px;
+}
+
+.zoom-controls .zoom-button:not(:first-child, :last-child) {
+  border-radius: 0;
+}
+
+.zoom-controls .zoom-button:first-child {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.zoom-controls .zoom-button:last-child {
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+
+.zoom-button svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.zoom-button[aria-disabled="true"] {
+  color: var(--ink-soft);
+  opacity: 0.55;
+  cursor: default;
 }
 
 .shortcuts-button {

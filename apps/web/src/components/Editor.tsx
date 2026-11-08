@@ -380,16 +380,12 @@ export function Editor({
             onChange={change}
             onRemove={remove}
             onAnnounce={setAnnouncement}
+            tools={<ShortcutsButton />}
             tableRef={(id, element) => {
               if (element) tableElements.current.set(id, element);
               else tableElements.current.delete(id);
             }}
           />
-          {editable && (
-            <div className="plan-tools">
-              <ShortcutsButton />
-            </div>
-          )}
           {draft.tables.length === 0 && (
             <p className="canvas-empty">{editable ? t.plan.empty : t.plan.emptyReadOnly}</p>
           )}
