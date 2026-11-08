@@ -1,5 +1,7 @@
 import {
+  acceptsArrival,
   durationFor,
+  previousDay,
   seatingOptions,
   type PlanZone,
   type TableShape,
@@ -7,6 +9,7 @@ import {
 import type { FastifyPluginAsync } from "fastify";
 import type { PoolClient } from "pg";
 import type { Pool } from "../db.js";
+import { loadOpeningHours } from "./booking-rules.js";
 
 const SLUG_PATTERN = "^[a-z0-9]+(-[a-z0-9]+)*$";
 
@@ -92,6 +95,78 @@ interface VenueRow {
   id: string;
   default_locale: string;
   locales: string[];
+  booking_horizon_days: number;
+  /** The arrival time in the venue's time zone. */
+  local_date: string;
+  local_time: string;
+  /** Calendar days from today to the arrival, both in the venue's time zone. */
+  days_ahead: number;
+}
+
+export interface BookingRateLimit {
+  /** Booking requests one address may send per window. */
+  max: number;
+  windowMs: number;
+}
+
+export interface ReservationRouteOptions {
+  pool: Pool;
+  now: () => Date;
+  rateLimit: BookingRateLimit;
+}
+
+function phoneDigits(phone: string): string {
+  return phone.replace(/[^0-9]/g, "");
+}
+
+/**
+ * The ways of reaching a guest, written so the same person matches however they typed it:
+ * e-mail in lower case, phone as its digits only.
+ */
+function contactKeys(body: CreateBody): string[] {
+  const keys: string[] = [];
+  if (body.guestEmail !== undefined) keys.push(`email:${body.guestEmail.toLowerCase()}`);
+  if (body.guestPhone !== undefined) keys.push(`phone:${phoneDigits(body.guestPhone)}`);
+  return keys.sort();
+}
+
+/**
+ * True when the same guest (same e-mail or same phone) already holds a booking at this venue
+ * that overlaps the new one. Catches a double click on "Book", and one person taking several
+ * tables for the same evening.
+ *
+ * Two clicks arrive at the same time, so each guest gets a queue of their own: the second
+ * request waits here until the first one commits, and then sees its booking. Every booking
+ * takes this queue before any table queue, so the two kinds of queue cannot block each other.
+ */
+async function guestAlreadyBooked(
+  client: PoolClient,
+  venueId: string,
+  body: CreateBody,
+  startsAt: Date,
+  endsAt: Date,
+): Promise<boolean> {
+  for (const key of contactKeys(body)) {
+    await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
+      `guest:${venueId}:${key}`,
+    ]);
+  }
+  const { rows } = await client.query(
+    `select 1 from reservations
+      where venue_id = $1 and holds_tables and starts_at < $3 and ends_at > $2
+        -- No booking lasts a day, so older ones can be skipped without reading them.
+        and starts_at > $2::timestamptz - interval '1 day'
+        and (lower(guest_email) = lower($4) or regexp_replace(guest_phone, '[^0-9]', '', 'g') = $5)
+      limit 1`,
+    [
+      venueId,
+      startsAt,
+      endsAt,
+      body.guestEmail ?? null,
+      body.guestPhone === undefined ? null : phoneDigits(body.guestPhone),
+    ],
+  );
+  return rows.length > 0;
 }
 
 interface TableRow {
@@ -279,15 +354,21 @@ function isRealDay(isoDateTime: string): boolean {
   return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth;
 }
 
-export const reservationRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool }) => {
+export const reservationRoutes: FastifyPluginAsync<ReservationRouteOptions> = (
+  app,
+  { pool, now, rateLimit },
+) => {
   app.post<{ Params: { slug: string }; Body: CreateBody }>(
     "/venues/:slug/reservations",
     {
+      config: { rateLimit: { max: rateLimit.max, timeWindow: rateLimit.windowMs } },
       schema: {
         summary: "Book a table. The engine picks one table, or several pushed together.",
         description:
           "How long the table is kept depends on the party size. The database refuses any " +
-          "booking that would share a table with another one at the same time.",
+          "booking that would share a table with another one at the same time. Guests can " +
+          "only book inside the venue's opening hours and horizon (see booking-rules), and " +
+          "only once for the same time. Each address may send a limited number of requests.",
         tags: ["reservations"],
         params: {
           type: "object",
@@ -301,6 +382,7 @@ export const reservationRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { poo
           404: errorResponse,
           409: errorResponse,
           422: errorResponse,
+          429: errorResponse,
           503: errorResponse,
         },
       },
@@ -310,11 +392,15 @@ export const reservationRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { poo
       if (!body.guestName.trim()) {
         return reply.code(400).send({ error: "guestName must not be blank" });
       }
+      if (body.guestPhone !== undefined && phoneDigits(body.guestPhone).length < 6) {
+        return reply.code(400).send({ error: "guestPhone needs at least 6 digits" });
+      }
       const startsAt = new Date(body.startsAt);
       if (Number.isNaN(startsAt.getTime()) || !isRealDay(body.startsAt)) {
         return reply.code(400).send({ error: "startsAt is not a valid date" });
       }
-      if (startsAt.getTime() <= Date.now()) {
+      const today = now();
+      if (startsAt.getTime() <= today.getTime()) {
         return reply.code(400).send({ error: "startsAt must be in the future" });
       }
 
@@ -327,8 +413,14 @@ export const reservationRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { poo
       const endsAt = new Date(startsAt.getTime() + minutes * 60_000);
 
       const venueResult = await pool.query<VenueRow>(
-        "select id, default_locale, locales from venues where slug = $1",
-        [request.params.slug],
+        `select id, default_locale, locales, booking_horizon_days,
+                to_char($2::timestamptz at time zone time_zone, 'YYYY-MM-DD') as local_date,
+                -- Counted to the minute: arriving at 15:30:30 counts as 15:30.
+                to_char($2::timestamptz at time zone time_zone, 'HH24:MI') as local_time,
+                ($2::timestamptz at time zone time_zone)::date
+                  - ($3::timestamptz at time zone time_zone)::date as days_ahead
+           from venues where slug = $1`,
+        [request.params.slug, startsAt, today],
       );
       const venue = venueResult.rows[0];
       if (!venue) {
@@ -340,14 +432,29 @@ export const reservationRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { poo
         return reply.code(400).send({ error: "This venue does not offer that language" });
       }
 
+      if (venue.days_ahead > venue.booking_horizon_days) {
+        return reply.code(422).send({
+          error: `This venue takes bookings up to ${String(venue.booking_horizon_days)} days ahead`,
+        });
+      }
+      const hours = await loadOpeningHours(pool, venue.id, [
+        venue.local_date,
+        previousDay(venue.local_date),
+      ]);
+      if (!acceptsArrival(hours, venue.local_date, venue.local_time)) {
+        return reply.code(422).send({ error: "The venue does not take bookings at that time" });
+      }
+
       const client = await pool.connect();
-      let booking: Booking | null;
+      let booking: Booking | "duplicate" | null;
       try {
         await client.query("begin");
         await client.query(`set local lock_timeout = '${LOCK_TIMEOUT}'`);
         await client.query(`set local statement_timeout = '${STATEMENT_TIMEOUT}'`);
-        booking = await bookBestTables(client, venue.id, body, locale, startsAt, endsAt);
-        await client.query(booking ? "commit" : "rollback");
+        booking = (await guestAlreadyBooked(client, venue.id, body, startsAt, endsAt))
+          ? "duplicate"
+          : await bookBestTables(client, venue.id, body, locale, startsAt, endsAt);
+        await client.query(booking !== null && booking !== "duplicate" ? "commit" : "rollback");
         client.release();
       } catch (error) {
         await client.query("rollback").catch(() => undefined);
@@ -362,6 +469,11 @@ export const reservationRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { poo
         throw error;
       }
 
+      if (booking === "duplicate") {
+        return reply
+          .code(409)
+          .send({ error: "You already have a booking at this venue around that time" });
+      }
       if (!booking) {
         return reply.code(409).send({ error: "No table is free for that party at that time" });
       }

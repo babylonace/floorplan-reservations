@@ -138,6 +138,7 @@ describe("GET /openapi.json", () => {
     expect(spec.openapi).toBe("3.1.0");
     expect(Object.keys(spec.paths).sort()).toEqual([
       "/health",
+      "/venues/{slug}/booking-rules",
       "/venues/{slug}/floor-plan",
       "/venues/{slug}/reservations",
       "/venues/{slug}/tables/{tableId}",

@@ -29,6 +29,9 @@ services:
     environment:
       DATABASE_URL: postgres://floorplan:${POSTGRES_PASSWORD:-local-only-password}@db:5432/floorplan
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      BOOKING_RATE_LIMIT_MAX: ${BOOKING_RATE_LIMIT_MAX:-10}
+      BOOKING_RATE_LIMIT_WINDOW_MINUTES: ${BOOKING_RATE_LIMIT_WINDOW_MINUTES:-15}
     ports:
       - "127.0.0.1:${API_PORT:-3000}:3000"
     depends_on:

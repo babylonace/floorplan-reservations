@@ -27,3 +27,21 @@ values
   ('00000000-0000-4000-8000-000000001005', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000102', 'T1', 1, 2, 'round', 150, 200, 70, 70, 0, '{}'),
   ('00000000-0000-4000-8000-000000001006', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000102', 'T2', 2, 4, 'rect', 450, 200, 120, 80, 0, '{}')
 on conflict do nothing;
+
+-- Lunch from Tuesday to Sunday, dinner from Thursday to Saturday. Closed on Mondays and on
+-- Christmas Day.
+insert into opening_hours (id, venue_id, weekday, first_arrival, last_arrival)
+select ('00000000-0000-4000-8000-0000000020' || lpad(weekday::text, 2, '0'))::uuid,
+       '00000000-0000-4000-8000-000000000001', weekday, '13:00', '15:30'
+  from generate_series(2, 7) as weekday
+on conflict do nothing;
+
+insert into opening_hours (id, venue_id, weekday, first_arrival, last_arrival)
+select ('00000000-0000-4000-8000-0000000021' || lpad(weekday::text, 2, '0'))::uuid,
+       '00000000-0000-4000-8000-000000000001', weekday, '20:00', '23:00'
+  from generate_series(4, 6) as weekday
+on conflict do nothing;
+
+insert into special_days (venue_id, day)
+values ('00000000-0000-4000-8000-000000000001', '2030-12-25')
+on conflict do nothing;
