@@ -22,7 +22,8 @@
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test",
     "dev": "tsc -b && npm run dev -w @floorplan-reservations/api",
     "db:migrate": "tsc -b && node apps/api/dist/migrate-cli.js",
-    "db:seed": "tsc -b && node apps/api/dist/seed-cli.js"
+    "db:seed": "tsc -b && node apps/api/dist/seed-cli.js",
+    "staff": "tsc -b && node apps/api/dist/staff-cli.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

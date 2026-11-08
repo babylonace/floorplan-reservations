@@ -10,6 +10,7 @@ const app = await buildApp({
   logger: { level: config.logLevel },
   trustProxy: config.trustProxy,
   bookingRateLimit: config.bookingRateLimit,
+  loginRateLimit: config.loginRateLimit,
 });
 
 app.addHook("onClose", async () => {

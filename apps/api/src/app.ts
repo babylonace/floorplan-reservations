@@ -2,6 +2,7 @@ import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import type { Pool } from "./db.js";
+import { authRoutes, sessionSecurityScheme, type RateLimit } from "./routes/auth.js";
 import { bookingRulesRoutes } from "./routes/booking-rules.js";
 import { floorPlanRoutes } from "./routes/floor-plan.js";
 import { healthRoutes } from "./routes/health.js";
@@ -10,6 +11,7 @@ import { reservationRoutes, type BookingRateLimit } from "./routes/reservations.
 import { BusyError } from "./transaction.js";
 
 export const DEFAULT_BOOKING_RATE_LIMIT: BookingRateLimit = { max: 10, windowMs: 15 * 60_000 };
+export const DEFAULT_LOGIN_RATE_LIMIT: RateLimit = { max: 30, windowMs: 15 * 60_000 };
 
 export interface AppOptions {
   pool: Pool;
@@ -20,6 +22,10 @@ export interface AppOptions {
    */
   trustProxy?: FastifyServerOptions["trustProxy"];
   bookingRateLimit?: BookingRateLimit;
+  /** Sign-in requests one address may send per window, on top of the limit per e-mail address. */
+  loginRateLimit?: RateLimit;
+  /** Sign-ins checking a password at the same time; more get 503. */
+  maxConcurrentLogins?: number;
   /** The current time. Tests set it; everyone else gets the clock. */
   now?: () => Date;
 }
@@ -29,6 +35,8 @@ export async function buildApp({
   logger = false,
   trustProxy = false,
   bookingRateLimit = DEFAULT_BOOKING_RATE_LIMIT,
+  loginRateLimit = DEFAULT_LOGIN_RATE_LIMIT,
+  maxConcurrentLogins,
   now = () => new Date(),
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger, trustProxy });
@@ -58,6 +66,7 @@ export async function buildApp({
         description: "Table reservations driven by the venue's own floor plan.",
         version: "0.1.0",
       },
+      components: { securitySchemes: sessionSecurityScheme },
     },
   });
 
@@ -73,7 +82,13 @@ export async function buildApp({
 
   await app.register(healthRoutes, { pool });
   await app.register(floorPlanRoutes, { pool });
-  await app.register(planEditorRoutes, { pool });
+  await app.register(authRoutes, {
+    pool,
+    now,
+    rateLimit: loginRateLimit,
+    ...(maxConcurrentLogins === undefined ? {} : { maxConcurrentLogins }),
+  });
+  await app.register(planEditorRoutes, { pool, now });
   await app.register(bookingRulesRoutes, { pool, now });
   await app.register(reservationRoutes, { pool, now, rateLimit: bookingRateLimit });
 

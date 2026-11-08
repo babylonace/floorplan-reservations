@@ -8,6 +8,7 @@ export interface Config {
   logLevel: string;
   trustProxy: boolean | string;
   bookingRateLimit: { max: number; windowMs: number };
+  loginRateLimit: { max: number; windowMs: number };
 }
 
 const ROOT_ENV_FILE = fileURLToPath(new URL("../../../.env", import.meta.url));
@@ -42,6 +43,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     bookingRateLimit: {
       max: positiveWhole(env, "BOOKING_RATE_LIMIT_MAX", 10),
       windowMs: positiveWhole(env, "BOOKING_RATE_LIMIT_WINDOW_MINUTES", 15) * 60_000,
+    },
+    loginRateLimit: {
+      max: positiveWhole(env, "LOGIN_RATE_LIMIT_MAX", 30),
+      windowMs: positiveWhole(env, "LOGIN_RATE_LIMIT_WINDOW_MINUTES", 15) * 60_000,
     },
   };
 }

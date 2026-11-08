@@ -137,6 +137,9 @@ describe("GET /openapi.json", () => {
     const spec = response.json<{ openapi: string; paths: Record<string, unknown> }>();
     expect(spec.openapi).toBe("3.1.0");
     expect(Object.keys(spec.paths).sort()).toEqual([
+      "/auth/login",
+      "/auth/logout",
+      "/auth/me",
       "/health",
       "/venues/{slug}/booking-rules",
       "/venues/{slug}/floor-plan",
@@ -146,5 +149,18 @@ describe("GET /openapi.json", () => {
       "/venues/{slug}/zones/{zoneId}",
       "/venues/{slug}/zones/{zoneId}/tables",
     ]);
+
+    // Every route that changes a venue says it needs the staff session cookie.
+    const paths = spec.paths as Record<string, Record<string, { security?: unknown }>>;
+    const changes = Object.entries(paths).flatMap(([path, methods]) =>
+      Object.entries(methods)
+        .filter(([method]) => method !== "get" && !path.startsWith("/auth/"))
+        .filter(([method]) => !(path.endsWith("/reservations") && method === "post"))
+        .map(([method, operation]) => ({ path, method, security: operation.security })),
+    );
+    expect(changes).toHaveLength(7);
+    for (const change of changes) {
+      expect(change).toEqual({ ...change, security: [{ staffSession: [] }] });
+    }
   });
 });

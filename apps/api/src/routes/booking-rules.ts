@@ -2,6 +2,7 @@ import { isoWeekday, type OpeningHours } from "@floorplan-reservations/engine";
 import type { FastifyPluginAsync } from "fastify";
 import type { Pool } from "../db.js";
 import { inTransaction } from "../transaction.js";
+import { authResponses, requireVenueRole, SESSION_SECURITY } from "./auth.js";
 import { errorResponse, slugParam } from "./shared.js";
 
 /**
@@ -185,15 +186,23 @@ export const bookingRulesRoutes: FastifyPluginAsync<{ pool: Pool; now: () => Dat
   app.put<{ Params: { slug: string }; Body: BookingRules }>(
     "/venues/:slug/booking-rules",
     {
+      // Only an owner of the venue may change when guests can book.
+      onRequest: requireVenueRole(pool, now, ["owner"]),
       schema: {
         summary: "Replace the booking rules: horizon, weekly hours and special days.",
         description:
           "Everything is replaced at once. Bookings already made are kept, even when they now " +
           "fall outside the hours.",
         tags,
+        security: SESSION_SECURITY,
         params,
         body: rulesSchema,
-        response: { 204: { type: "null" }, 400: errorResponse, 404: errorResponse },
+        response: {
+          ...authResponses,
+          204: { type: "null" },
+          400: errorResponse,
+          404: errorResponse,
+        },
       },
     },
     async (request, reply) => {

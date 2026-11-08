@@ -8,6 +8,7 @@ import {
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import type { PoolClient } from "pg";
 import type { Pool } from "../db.js";
+import { authResponses, requireVenueRole, SESSION_SECURITY } from "./auth.js";
 import { errorCode, inTransaction } from "../transaction.js";
 import {
   errorResponse,
@@ -315,8 +316,15 @@ async function run(
   return send(reply, outcome);
 }
 
-export const planEditorRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool }) => {
+export interface PlanEditorOptions {
+  pool: Pool;
+  now: () => Date;
+}
+
+export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { pool, now }) => {
   const tags = ["floor plan editor"];
+  // Every route in this plugin changes the plan, so every one needs an owner of the venue.
+  app.addHook("onRequest", requireVenueRole(pool, now, ["owner"]));
 
   app.post<{
     Params: { slug: string };
@@ -327,6 +335,7 @@ export const planEditorRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool
       schema: {
         summary: "Add a zone (a room, a terrace) to the floor plan.",
         tags,
+        security: SESSION_SECURITY,
         params: venueParams,
         body: {
           type: "object",
@@ -334,7 +343,13 @@ export const planEditorRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool
           required: ["name", "width", "height"],
           properties: zoneFields,
         },
-        response: { 201: zoneSchema, 400: errorResponse, 404: errorResponse, 409: errorResponse },
+        response: {
+          ...authResponses,
+          201: zoneSchema,
+          400: errorResponse,
+          404: errorResponse,
+          409: errorResponse,
+        },
       },
     },
     (request, reply) => {
@@ -375,6 +390,7 @@ export const planEditorRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool
         summary: "Rename, resize or reorder a zone.",
         description: "A smaller zone is refused when tables would end up outside it.",
         tags,
+        security: SESSION_SECURITY,
         params: zoneParams,
         body: {
           type: "object",
@@ -383,6 +399,7 @@ export const planEditorRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool
           properties: zoneFields,
         },
         response: {
+          ...authResponses,
           200: zoneSchema,
           400: errorResponse,
           404: errorResponse,
@@ -439,8 +456,14 @@ export const planEditorRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool
           "Refused while any of its tables has an upcoming reservation. Tables that were booked " +
           "in the past are retired, so old reservations keep them.",
         tags,
+        security: SESSION_SECURITY,
         params: zoneParams,
-        response: { 204: { type: "null" }, 404: errorResponse, 409: errorResponse },
+        response: {
+          ...authResponses,
+          204: { type: "null" },
+          404: errorResponse,
+          409: errorResponse,
+        },
       },
     },
     async (request, reply) =>
@@ -508,6 +531,7 @@ export const planEditorRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool
           "Refused with 422 when the table would stick out of the zone, overlap another table " +
           "or have impossible seat counts.",
         tags,
+        security: SESSION_SECURITY,
         params: zoneParams,
         body: {
           type: "object",
@@ -516,6 +540,7 @@ export const planEditorRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool
           properties: tableFields,
         },
         response: {
+          ...authResponses,
           201: tableSchema,
           400: errorResponse,
           404: errorResponse,
@@ -598,6 +623,7 @@ export const planEditorRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool
           "reservation at this table would no longer have room. Setting `bookable` to false is " +
           "always allowed: reservations already made keep the table.",
         tags,
+        security: SESSION_SECURITY,
         params: tableParams,
         body: {
           type: "object",
@@ -606,6 +632,7 @@ export const planEditorRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool
           properties: { zoneId: uuid, ...tableFields },
         },
         response: {
+          ...authResponses,
           200: tableSchema,
           400: errorResponse,
           404: errorResponse,
@@ -734,8 +761,14 @@ export const planEditorRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool
           "Refused while the table has an upcoming reservation; mark it as not bookable " +
           "instead. A table booked in the past is retired, so old reservations keep it.",
         tags,
+        security: SESSION_SECURITY,
         params: tableParams,
-        response: { 204: { type: "null" }, 404: errorResponse, 409: errorResponse },
+        response: {
+          ...authResponses,
+          204: { type: "null" },
+          404: errorResponse,
+          409: errorResponse,
+        },
       },
     },
     async (request, reply) =>

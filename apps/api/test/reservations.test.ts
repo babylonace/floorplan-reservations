@@ -9,6 +9,7 @@ import {
   TEST_APP_OPTIONS,
   testDatabaseUrl,
   type TestTable,
+  ownerCookie,
 } from "./helpers.js";
 
 interface Created {
@@ -23,10 +24,12 @@ interface Created {
 // Room for every request in the concurrency tests to hold its own connection at once.
 const pool = createPool(testDatabaseUrl(), { max: 40 });
 let app: FastifyInstance;
+let cookie: string;
 const slugs: string[] = [];
 
 beforeAll(async () => {
   app = await buildApp({ pool, ...TEST_APP_OPTIONS });
+  cookie = await ownerCookie(app);
   // Open every connection up front. Otherwise the first requests of a burst wait for new
   // connections one by one and no longer arrive at the same time.
   const clients = await Promise.all(Array.from({ length: 30 }, () => pool.connect()));
@@ -374,6 +377,7 @@ describe("limits on the public booking endpoint", () => {
     return app.inject({
       method: "PUT",
       url: `/venues/${slug}/booking-rules`,
+      headers: { cookie },
       payload: { horizonDays: 60, weekly: [], specialDays: [], ...rules },
     });
   }
