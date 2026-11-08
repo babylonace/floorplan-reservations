@@ -39,6 +39,10 @@ import {
 const MAX_CM = 100_000;
 // Leaves room for colours, a font and the like, without letting the plan grow without limit.
 const MAX_STYLE_CHARS = 2000;
+// The engine compares every table with every other one in a zone, on each booking. These caps
+// are far above any real room and keep that work small.
+export const MAX_ZONES_PER_VENUE = 50;
+export const MAX_TABLES_PER_ZONE = 200;
 
 const uuid = { type: "string", format: "uuid" } as const;
 
@@ -167,21 +171,39 @@ function checkText(body: ZoneBody & TableBody): Outcome | null {
   if (body.name !== undefined && !body.name.trim()) return badRequest("name must not be blank");
   if (body.label !== undefined && !body.label.trim()) return badRequest("label must not be blank");
   if (body.style !== undefined) {
-    const json = JSON.stringify(body.style);
-    if (json.length > MAX_STYLE_CHARS) {
+    if (JSON.stringify(body.style).length > MAX_STYLE_CHARS) {
       return badRequest(`style must be at most ${MAX_STYLE_CHARS} characters as JSON`);
     }
     // PostgreSQL cannot store the NUL character, not even inside JSON.
-    if (json.includes("\\u0000")) return badRequest("style must not contain the NUL character");
+    if (hasNul(body.style)) return badRequest("style must not contain the NUL character");
   }
   return null;
 }
 
-async function findVenueId(client: PoolClient, slug: string): Promise<string | null> {
-  const { rows } = await client.query<{ id: string }>("select id from venues where slug = $1", [
-    slug,
-  ]);
+/** True when any key or string inside `value` contains the NUL character. */
+function hasNul(value: unknown): boolean {
+  if (typeof value === "string") return value.includes("\u0000");
+  if (Array.isArray(value)) return value.some(hasNul);
+  if (typeof value === "object" && value !== null) {
+    return Object.entries(value).some(([key, inner]) => key.includes("\u0000") || hasNul(inner));
+  }
+  return false;
+}
+
+/**
+ * The venue's id. `lock` makes zone creations of one venue take turns, so they can count its
+ * zones; it does not hold up bookings, which only need the venue to exist.
+ */
+async function findVenueId(client: PoolClient, slug: string, lock = false): Promise<string | null> {
+  const { rows } = await client.query<{ id: string }>(
+    `select id from venues where slug = $1 ${lock ? "for no key update" : ""}`,
+    [slug],
+  );
   return rows[0]?.id ?? null;
+}
+
+function tooMany(error: string): Outcome {
+  return { status: 409, body: { error } };
 }
 
 /** Locks the venue's zones with these ids, in id order, and returns the ones in use. */
@@ -322,8 +344,15 @@ export const planEditorRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool
 
       return run(reply, "A zone with that name already exists", () =>
         inTransaction(pool, async (client): Promise<Outcome> => {
-          const venueId = await findVenueId(client, request.params.slug);
+          const venueId = await findVenueId(client, request.params.slug, true);
           if (!venueId) return notFound("Venue");
+          const count = await client.query<{ zones: number }>(
+            "select count(*)::int as zones from zones where venue_id = $1 and retired_at is null",
+            [venueId],
+          );
+          if ((count.rows[0]?.zones ?? 0) >= MAX_ZONES_PER_VENUE) {
+            return tooMany(`A venue can have at most ${MAX_ZONES_PER_VENUE} zones`);
+          }
 
           const { rows } = await client.query<ZoneRow>(
             `insert into zones (venue_id, name, sort_order, width, height)
@@ -522,6 +551,9 @@ export const planEditorRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool
             rotation: body.rotation ?? 0,
           };
           const tables = await zoneTables(client, zone.id);
+          if (tables.length >= MAX_TABLES_PER_ZONE) {
+            return tooMany(`A zone can have at most ${MAX_TABLES_PER_ZONE} tables`);
+          }
           const issues = newIssues(planZone(zone, tables), planZone(zone, [...tables, table]));
           if (issues.length > 0) return planRefused(issues);
 
@@ -641,6 +673,9 @@ export const planEditorRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool
           // Taking a table out of a zone cannot break that zone, so only the zone it ends up
           // in is checked.
           const others = (await zoneTables(client, toZoneId)).filter((t) => t.id !== tableId);
+          if (others.length >= MAX_TABLES_PER_ZONE) {
+            return tooMany(`A zone can have at most ${MAX_TABLES_PER_ZONE} tables`);
+          }
           const issues = newIssues(
             planZone(toZone, toZoneId === fromZoneId ? [...others, before] : others),
             planZone(toZone, [...others, after]),

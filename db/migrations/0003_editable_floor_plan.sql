@@ -4,6 +4,10 @@
 --
 -- A retired table keeps its row and its label, so the label has to be free again for a new
 -- table. Uniqueness of zone names and table labels now only counts rows still in use.
+--
+-- Forward only. Once a retired table shares its label with a new one, the old unique
+-- constraints cannot be put back, and older versions of the app would show retired tables on
+-- the plan (they could still never be booked, because retired tables are not bookable).
 
 alter table zones
   add column retired_at timestamptz;

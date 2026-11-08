@@ -86,8 +86,9 @@ La CI pasa las mismas comprobaciones en cada pull request contra PostgreSQL 18, 
 Las zonas y las mesas se pueden crear, cambiar y quitar con la API: posición, tamaño, forma, giro, estilo, zona y si la mesa se puede reservar por internet.
 
 - Cada cambio se comprueba con `validateZone` contra lo que hay guardado. Si una mesa fuera a pisar otra, salirse de su zona o tener asientos imposibles, se rechaza con `422` y la lista de problemas. Los problemas que el plano ya tenía no bloquean cambios que no tienen que ver.
-- Ningún cambio deja sin sitio a una reserva futura. Quitar asientos, separar mesas juntas, hacer redonda una de ellas o llevarla a otra zona se rechaza con `409` mientras una reserva la necesite.
-- Marcar una mesa como no reservable siempre se puede: las reservas ya hechas la conservan y las nuevas van a otra mesa.
+- Ningún cambio deja sin sitio a una reserva futura. Quitarle asientos que necesita, separar las mesas que tiene juntas, hacer redonda una de ellas o llevar una a otra zona se rechaza con `409`. Una mesa reservada sola sí se puede mover, incluso a otra zona: el grupo la conserva.
+- Marcar una mesa como no reservable nunca rompe una reserva: las ya hechas la conservan y las nuevas van a otra mesa.
+- Un local puede tener hasta 50 zonas y una zona hasta 200 mesas.
 - Una mesa con una reserva futura no se puede quitar. Una mesa que solo tuvo reservas pasadas se **retira** en vez de borrarse: sale del plano y del motor, y las reservas antiguas siguen apuntando a ella. Su nombre queda libre. Quitar una zona funciona igual con todas sus mesas.
 - Los cambios en la misma zona esperan su turno (bloquean la zona y luego las mesas). Una reserva que tuvo que esperar a que se editaran sus mesas vuelve a leer el plano antes de guardarse, así que no puede caer en una mesa que acaba de perder asientos o de dejar de ser reservable.
 

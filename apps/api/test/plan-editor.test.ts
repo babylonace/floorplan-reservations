@@ -659,3 +659,62 @@ describe("plan edits and bookings at the same moment", () => {
     expect((await floorPlan("race-two-tables")).zones[0]?.tables).toHaveLength(1);
   });
 });
+
+describe("limits", () => {
+  it("caps the tables in a zone and the zones in a venue", async () => {
+    const { zoneId, venueId } = await venueWith("limit-tables");
+    // 200 small tables in a grid, written straight to the database.
+    await pool.query(
+      `insert into dining_tables (venue_id, zone_id, label, min_seats, max_seats, x, y, width, height)
+       select $1, $2, 'T' || n, 1, 2, 50 + (n % 20) * 90, 50 + (n / 20) * 90, 80, 80
+         from generate_series(0, 199) as n`,
+      [venueId, zoneId],
+    );
+    const extra = await call("POST", `/venues/limit-tables/zones/${zoneId}/tables`, {
+      ...TABLE,
+      x: 1950,
+      y: 950,
+      width: 50,
+      height: 50,
+    });
+    expect(extra.statusCode).toBe(409);
+
+    await pool.query(
+      `insert into zones (venue_id, name, width, height)
+       select $1, 'Z' || n, 100, 100 from generate_series(1, 49) as n`,
+      [venueId],
+    );
+    const zone = await call("POST", "/venues/limit-tables/zones", {
+      name: "One too many",
+      width: 100,
+      height: 100,
+    });
+    expect(zone.statusCode).toBe(409);
+  });
+
+  it("accepts text that only looks like an escaped NUL in a style", async () => {
+    const { zoneId } = await venueWith("limit-style");
+    const response = await call("POST", `/venues/limit-style/zones/${zoneId}/tables`, {
+      ...TABLE,
+      style: { note: String.raw`\u0000` },
+    });
+    expect(response.statusCode).toBe(201);
+  });
+
+  it("lets a table booked on its own move to another zone: the party keeps it", async () => {
+    const { tableIds } = await venueWith("limit-move-single", [{ label: "A", x: 100 }]);
+    expect((await book("limit-move-single", 2)).statusCode).toBe(201);
+    const terrace = await call("POST", "/venues/limit-move-single/zones", {
+      name: "Terrace",
+      width: 500,
+      height: 500,
+    });
+
+    const moved = await call("PATCH", `/venues/limit-move-single/tables/${tableIds[0]}`, {
+      zoneId: terrace.json<ApiZone>().id,
+      x: 200,
+      y: 200,
+    });
+    expect(moved.statusCode).toBe(200);
+  });
+});

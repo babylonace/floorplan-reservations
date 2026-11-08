@@ -86,8 +86,9 @@ CI runs the same checks on every pull request against PostgreSQL 18, and also bu
 Zones and tables can be added, changed and removed through the API: position, size, shape, rotation, style, zone and whether the table can be booked online.
 
 - Every change is checked with `validateZone` against what is stored. A change that would make a table overlap another one, stick out of its zone or have impossible seats is refused with `422` and the list of problems. Problems the plan already had don't block unrelated edits.
-- Changes never leave an upcoming reservation without room. Taking seats away, moving joined tables apart, making one of them round or moving it to another zone is refused with `409` while a booking needs it.
-- Marking a table as not bookable is always allowed: bookings already made keep it, new ones go elsewhere.
+- Changes never leave an upcoming reservation without room. Taking away seats it needs, moving the tables it holds together apart, making one of them round or moving one of them to another zone is refused with `409`. A table booked on its own can still be moved, even to another zone: the party keeps it.
+- Marking a table as not bookable never breaks a booking: bookings already made keep it, new ones go elsewhere.
+- A venue can have up to 50 zones and a zone up to 200 tables.
 - A table with an upcoming reservation can't be removed. A table that was only booked in the past is **retired** instead of deleted: it leaves the plan and the engine, and old reservations still point at it. Its label is free again. Removing a zone works the same way for all its tables.
 - Edits to the same zone take turns (they lock the zone, then the tables). A booking that had to wait for an edit of its tables reads the plan again before it is saved, so it can't land on a table that just lost its seats or stopped being bookable.
 
