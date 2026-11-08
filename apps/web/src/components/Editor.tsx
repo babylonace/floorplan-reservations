@@ -36,6 +36,12 @@ export interface EditorProps {
   onZoneDeleted: (name: string) => void;
 }
 
+/** Height over width of the zone, for the plan's height on narrow screens. */
+function planRatio(zone: { width: number; height: number }): number {
+  const ratio = zone.height / zone.width;
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : 0.75;
+}
+
 /** Stands for the plan itself in `focusNext`. */
 const CANVAS = "canvas";
 
@@ -318,7 +324,7 @@ export function Editor({
         <div
           className="canvas-wrap"
           // On narrow screens the plan is as tall as the zone's shape needs, not a fixed share.
-          style={{ "--plan-ratio": String(zone.height / zone.width) } as CSSProperties}
+          style={{ "--plan-ratio": String(planRatio(zone)) } as CSSProperties}
         >
           <PlanCanvas
             zone={zone}

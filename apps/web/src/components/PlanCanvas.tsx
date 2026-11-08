@@ -66,7 +66,10 @@ export const HANDLES = {
 function useCoarsePointer(): boolean {
   const query = "(pointer: coarse)";
   const [coarse, setCoarse] = useState(
-    () => typeof window.matchMedia === "function" && window.matchMedia(query).matches,
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(query).matches,
   );
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
@@ -88,6 +91,8 @@ export function PlanCanvas(props: PlanCanvasProps) {
   const { t, format } = useI18n();
   const svgRef = useRef<SVGSVGElement>(null);
   const gesture = useRef<Gesture | null>(null);
+  /** A finger or pen pressed on the free space: it lets go of the table only if it was a tap. */
+  const tap = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const ids = useId().replace(/:/g, "");
   const hatchId = `hatch-${ids}`;
   const gridId = `grid-${ids}`;
@@ -165,6 +170,11 @@ export function PlanCanvas(props: PlanCanvasProps) {
   function startGesture(event: PointerEvent, table: Table, kind: Gesture["kind"]) {
     event.stopPropagation();
     onSelect(table.id);
+    // Holding the touch (see below) also stops the browser focusing the table, so do it here:
+    // a tablet with a keyboard can then use the arrows straight away.
+    if (event.pointerType !== "mouse" && event.currentTarget instanceof Element) {
+      event.currentTarget.closest<SVGGElement>(".plan-table")?.focus({ preventScroll: true });
+    }
     // One gesture at a time: a second finger does not take over the table being dragged.
     if (!editable || event.button !== 0 || gesture.current) return;
     const point = toPlan(event);
@@ -291,12 +301,23 @@ export function PlanCanvas(props: PlanCanvasProps) {
         aria-label={t.plan.label(zone.name, format.meters(zone.width), format.meters(zone.height))}
         aria-describedby={helpId}
         onPointerMove={onPointerMove}
-        onPointerUp={endGesture}
+        onPointerUp={(event) => {
+          endGesture(event);
+          const pressed = tap.current;
+          if (pressed?.pointerId !== event.pointerId) return;
+          tap.current = null;
+          if (Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) < 10) onSelect(null);
+        }}
         onPointerCancel={(event) => {
+          // The browser took the touch over to scroll: the table stays selected.
+          if (tap.current?.pointerId === event.pointerId) tap.current = null;
           if (gesture.current?.pointerId === event.pointerId) cancelGesture();
         }}
-        onPointerDown={() => {
-          onSelect(null);
+        onPointerDown={(event) => {
+          // A mouse lets go at once. A finger may be starting to scroll down to the panel, so it
+          // waits to see whether this is a tap.
+          if (event.pointerType === "mouse") onSelect(null);
+          else tap.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
         }}
       >
         <defs>
@@ -565,10 +586,11 @@ function TableShape({
                 onPointerDown(event, "rotate");
               }}
             />
+            {/* It reaches outwards from the corner, so it covers little of a small table. */}
             <rect
               className="handle-target handle-target-resize"
-              x={w / 2 - (handles.target / 2) * unit}
-              y={h / 2 - (handles.target / 2) * unit}
+              x={w / 2 - (handles.resize / 2 + 2) * unit}
+              y={h / 2 - (handles.resize / 2 + 2) * unit}
               width={handles.target * unit}
               height={handles.target * unit}
               onPointerDown={(event) => {

@@ -61,6 +61,15 @@ test("a finger drags tables, grabs big handles and still scrolls the page", asyn
   const free = { x: plan.x + 20, y: plan.y + plan.height - 20 };
   await swipe(cdp, free, { x: free.x, y: free.y - 300 });
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
+  // Scrolling is not a tap: the table stays chosen and its details are still in the panel.
+  await expect(table).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("heading", { name: "Mesa 3" })).toBeVisible();
+
+  // A tap on the free space lets go of it.
+  const panel = await page.locator("[data-plan-canvas]").boundingBox();
+  if (!panel) throw new Error("The plan is not on screen");
+  await page.touchscreen.tap(panel.x + 20, panel.y + panel.height - 20);
+  await expect(table).toHaveAttribute("aria-pressed", "false");
 
   // Every button and field is at least 44 px tall on a touch screen.
   const short = await page.evaluate(() =>
