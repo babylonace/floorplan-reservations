@@ -110,8 +110,9 @@ export const es: DeepPartial<Messages> = {
   plan: {
     label: (zone: string, width: string, depth: string) =>
       `Plano de ${zone}, de ${width} de ancho y ${depth} de fondo`,
-    help: "Tab pasa de una mesa a otra. Las flechas mueven la mesa elegida 5 cm, o 50 cm con Mayús. R la gira 15 grados y Mayús+R al otro lado. Supr la quita. Esc la suelta.",
-    helpReadOnly: "Tab pasa de una mesa a otra.",
+    help: "Tab pasa de una mesa a otra. Las flechas mueven la mesa elegida 5 cm, o 50 cm con Mayús. R la gira 15 grados y Mayús+R al otro lado. Supr la quita. Esc la suelta. Más y menos acercan y alejan el plano; 0 lo enseña entero.",
+    helpReadOnly:
+      "Tab pasa de una mesa a otra. Más y menos acercan y alejan el plano; 0 lo enseña entero.",
     empty: "Zona vacía. Añade una mesa con los botones de arriba.",
     emptyReadOnly: "Esta zona todavía no tiene mesas.",
     seats: (min: number, max: number) =>
@@ -136,9 +137,19 @@ export const es: DeepPartial<Messages> = {
         .filter(Boolean)
         .join(", "),
     toolbar: "Herramientas del plano",
+    zoom: "Zoom",
+    zoomIn: "Acercar",
+    zoomOut: "Alejar",
+    zoomFit: "Ver todo el plano",
     shortcutsTitle: "Atajos de teclado",
-    shortcuts: [
+    viewShortcuts: [
       ["Tab", "siguiente mesa"],
+      ["+ / −", "acercar o alejar"],
+      ["0", "ver todo el plano"],
+      ["Ctrl + rueda", "acercar donde está el ratón"],
+      ["Arrastrar el suelo", "moverse con el zoom puesto"],
+    ],
+    shortcuts: [
       ["Flechas", "mover 5 cm"],
       ["Mayús + flechas", "mover 50 cm"],
       ["R / Mayús + R", "girar 15°"],
@@ -190,6 +201,7 @@ export const es: DeepPartial<Messages> = {
       `La mesa ${label} mide ahora ${width} por ${depth}.`,
     removed: (label: string) => `Mesa ${label} quitada. Guarda para que sea definitivo.`,
     added: (label: string) => `Mesa ${label} añadida.`,
+    zoom: (percent: number) => `Zoom al ${String(percent)} %.`,
     addedInLine: (label: string, after: string) => `Tramo de barra ${label} añadido tras ${after}.`,
   },
   errors: {

@@ -12,6 +12,7 @@ import {
   useState,
   type KeyboardEvent,
   type PointerEvent,
+  type ReactNode,
 } from "react";
 import type { Table } from "../api/types";
 import { useI18n } from "../i18n/i18n";
@@ -30,6 +31,17 @@ import {
   type Point,
   chairLayout,
 } from "../plan/geometry";
+import {
+  clampView,
+  fitView,
+  isInView,
+  maxZoom,
+  viewBox,
+  zoomAround,
+  ZOOM_STEP,
+  type PlanFrame,
+  type PlanView,
+} from "../plan/view";
 
 /**
  * The zone drawn to scale. One SVG unit is one centimetre, so the plan's own numbers are used
@@ -37,6 +49,10 @@ import {
  * one and R turns it. The pointer drags, turns (round handle) and resizes (square handle).
  * On a touch screen the handles grow, and a finger on the plan's free space scrolls the page:
  * only a finger that lands on a table moves it.
+ *
+ * The plan zooms in and out with the buttons in its corner, + and - (0 shows it all again),
+ * Ctrl and the mouse wheel, or two fingers. Zoomed in, dragging the free space (or the wheel on
+ * its own) moves around the plan. Labels, lines and handles keep their size on screen.
  */
 
 export interface PlanCanvasProps {
@@ -51,11 +67,29 @@ export interface PlanCanvasProps {
   onAnnounce: (text: string) => void;
   /** Lets the editor move keyboard focus to a table, for example one just added. */
   tableRef: (id: string, element: SVGGElement | null) => void;
+  /** More buttons for the plan's corner, after the zoom buttons. */
+  tools?: ReactNode;
 }
 
 type Gesture =
   | { kind: "move"; id: string; pointerId: number; start: Table; offset: Point }
   | { kind: "resize" | "rotate"; id: string; pointerId: number; start: Table };
+
+/** Dragging the free space of a zoomed-in plan. */
+interface Pan {
+  pointerId: number;
+  x: number;
+  y: number;
+  center: Point;
+  unit: number;
+}
+
+/** Two fingers on the plan: the plan point between them stays between them. */
+interface Pinch {
+  distance: number;
+  zoom: number;
+  anchor: Point;
+}
 
 const SCALE_STEPS = [50, 100, 200, 500, 1000, 2000, 5000, 10_000, 20_000];
 
@@ -104,6 +138,14 @@ export function PlanCanvas(props: PlanCanvasProps) {
   const gridId = `grid-${ids}`;
   const helpId = `help-${ids}`;
   const handles = useCoarsePointer() ? HANDLES.coarse : HANDLES.fine;
+  const pan = useRef<Pan | null>(null);
+  /** Set by the keyboard (and focus not caused by a pointer): bring the selected table into view. */
+  const follow = useRef(false);
+  /** A pointer is pressed on the plan. */
+  const pressing = useRef(false);
+  const pinch = useRef<Pinch | null>(null);
+  /** Fingers on the plan, by pointer id, for the pinch. */
+  const fingers = useRef(new Map<number, Point>());
 
   // A finger that lands on a table drags it instead of scrolling the page; anywhere else on the
   // plan it scrolls as usual. Pointer events cannot stop scrolling, so this listens to touches.
@@ -114,14 +156,28 @@ export function PlanCanvas(props: PlanCanvasProps) {
   useEffect(() => {
     const element = svgRef.current;
     if (!element) return;
+    const onPlan = (event: TouchEvent) =>
+      [...event.touches].filter(
+        (touch) => touch.target instanceof Node && element.contains(touch.target),
+      ).length;
     const hold = (event: TouchEvent) => {
+      // Two fingers on the plan zoom it, never the page.
+      if (onPlan(event) > 1) {
+        event.preventDefault();
+        return;
+      }
       if (editableRef.current && event.target instanceof Element) {
         if (event.target.closest(".plan-table")) event.preventDefault();
       }
     };
+    const twoFingers = (event: TouchEvent) => {
+      if (onPlan(event) > 1 && event.cancelable) event.preventDefault();
+    };
     element.addEventListener("touchstart", hold, { passive: false });
+    element.addEventListener("touchmove", twoFingers, { passive: false });
     return () => {
       element.removeEventListener("touchstart", hold);
+      element.removeEventListener("touchmove", twoFingers);
     };
   }, []);
 
@@ -144,9 +200,206 @@ export function PlanCanvas(props: PlanCanvasProps) {
     ? Math.max(zone.width / measured.width, zone.height / measured.height)
     : Math.max(zone.width, zone.height, 200) / 900;
   const pad = 70 * roughUnit;
-  const unit = measured
+  const fitUnit = measured
     ? Math.max((zone.width + 2 * pad) / measured.width, (zone.height + 2 * pad) / measured.height)
     : roughUnit;
+  const frame: PlanFrame = {
+    x: -pad,
+    y: -pad,
+    width: zone.width + 2 * pad,
+    height: zone.height + 2 * pad,
+  };
+  const mostZoom = maxZoom(fitUnit);
+  const [view, setView] = useState<PlanView>(() => fitView(frame));
+  const shown = clampView(view, frame, mostZoom);
+  const box = viewBox(shown, frame);
+  const unit = fitUnit / shown.zoom;
+  const zoomed = shown.zoom > 1;
+
+  // What the wheel, the keys and the fingers need, kept fresh for the listeners.
+  const latest = useRef({ frame, fitUnit, mostZoom, zoom: shown.zoom, center: shown.center });
+  useLayoutEffect(() => {
+    latest.current = { frame, fitUnit, mostZoom, zoom: shown.zoom, center: shown.center };
+  });
+
+  /** How far `client` is from the middle of the plan's box, in screen pixels. */
+  function fromMiddle(client: Point): Point {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return {
+      x: client.x - (rect.left + rect.width / 2),
+      y: client.y - (rect.top + rect.height / 2),
+    };
+  }
+
+  /** Zooms to `zoom` keeping the plan under `client` (the middle when not given) in place. */
+  function zoomTo(zoom: number | ((current: number) => number), client?: Point) {
+    const offset = client ? fromMiddle(client) : { x: 0, y: 0 };
+    const { frame: f, fitUnit: fit, mostZoom: most } = latest.current;
+    setView((previous) => {
+      const now = clampView(previous, f, most);
+      const target = clamp(typeof zoom === "function" ? zoom(now.zoom) : zoom, 1, most);
+      const anchor = {
+        x: now.center.x + (offset.x * fit) / now.zoom,
+        y: now.center.y + (offset.y * fit) / now.zoom,
+      };
+      return clampView(zoomAround(anchor, offset, target, fit), f, most);
+    });
+  }
+
+  /**
+   * Moves the plan by this many screen pixels (positive: the plan goes left and up). False when
+   * it is already at the edge that way, so the wheel can scroll the page instead.
+   */
+  function panBy(dx: number, dy: number): boolean {
+    const { frame: f, fitUnit: fit, mostZoom: most, center } = latest.current;
+    const step = fit / latest.current.zoom;
+    const next = clampView(
+      {
+        zoom: latest.current.zoom,
+        center: { x: center.x + dx * step, y: center.y + dy * step },
+      },
+      f,
+      most,
+    );
+    if (Math.abs(next.center.x - center.x) < 0.01 && Math.abs(next.center.y - center.y) < 0.01) {
+      return false;
+    }
+    setView((previous) => {
+      const now = clampView(previous, f, most);
+      return clampView(
+        { ...now, center: { x: now.center.x + dx * step, y: now.center.y + dy * step } },
+        f,
+        most,
+      );
+    });
+    return true;
+  }
+
+  const actions = useRef({ zoomTo, panBy });
+  useLayoutEffect(() => {
+    actions.current = { zoomTo, panBy };
+  });
+
+  // Ctrl (or Cmd) and the wheel zoom around the pointer, as does a pinch on a touchpad. Zoomed
+  // in, the wheel on its own moves around the plan; zoomed out, it scrolls the page as usual.
+  useEffect(() => {
+    const element = svgRef.current;
+    if (!element) return;
+    const wheel = (event: WheelEvent) => {
+      const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1;
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        const factor = Math.exp(-event.deltaY * scale * 0.002);
+        actions.current.zoomTo((zoom) => zoom * factor, { x: event.clientX, y: event.clientY });
+      } else if (latest.current.zoom > 1) {
+        if (actions.current.panBy(event.deltaX * scale, event.deltaY * scale)) {
+          event.preventDefault();
+        }
+      }
+    };
+    // Safari sends a touchpad pinch as its own gesture events instead of Ctrl and the wheel.
+    type Gesture = Event & { scale: number; clientX: number; clientY: number };
+    let startZoom = 1;
+    const gestureStart = (event: Event) => {
+      event.preventDefault();
+      startZoom = latest.current.zoom;
+    };
+    const gestureChange = (event: Event) => {
+      event.preventDefault();
+      const gesture = event as Gesture;
+      actions.current.zoomTo(startZoom * gesture.scale, { x: gesture.clientX, y: gesture.clientY });
+    };
+    element.addEventListener("wheel", wheel, { passive: false });
+    element.addEventListener("gesturestart", gestureStart);
+    element.addEventListener("gesturechange", gestureChange);
+    return () => {
+      element.removeEventListener("wheel", wheel);
+      element.removeEventListener("gesturestart", gestureStart);
+      element.removeEventListener("gesturechange", gestureChange);
+    };
+  }, []);
+
+  // Zoomed in, the selected table stays in sight when the keyboard moves or chooses it, or the
+  // editor focuses it (a new table, a problem in the list). Never while a pointer holds the
+  // plan: the view would slide away under a table being dragged.
+  const selectedTable = tables.find((table) => table.id === selectedId);
+  const followX = selectedTable?.x;
+  const followY = selectedTable?.y;
+  useEffect(() => {
+    if (!follow.current) return;
+    follow.current = false;
+    if (followX === undefined || followY === undefined) return;
+    const { frame: f, fitUnit: fit, mostZoom: most } = latest.current;
+    setView((previous) => {
+      const now = clampView(previous, f, most);
+      if (now.zoom <= 1) return previous;
+      const seen = viewBox(now, f);
+      if (isInView({ x: followX, y: followY }, seen, (40 * fit) / now.zoom)) return previous;
+      return clampView({ ...now, center: { x: followX, y: followY } }, f, most);
+    });
+  }, [selectedId, followX, followY]);
+
+  /** Two fingers down: the pinch starts, and whatever one finger was doing stops. */
+  function startPinch() {
+    const [a, b] = [...fingers.current.values()];
+    if (!a || !b) {
+      pinch.current = null;
+      return;
+    }
+    cancelGesture();
+    pan.current = null;
+    tap.current = null;
+    const middle = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const offset = fromMiddle(middle);
+    pinch.current = {
+      distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+      zoom: shown.zoom,
+      anchor: { x: shown.center.x + offset.x * unit, y: shown.center.y + offset.y * unit },
+    };
+  }
+
+  function movePinch() {
+    const active = pinch.current;
+    const [a, b] = [...fingers.current.values()];
+    if (!active || !a || !b) return;
+    const zoom = clamp(
+      (active.zoom * Math.hypot(a.x - b.x, a.y - b.y)) / active.distance,
+      1,
+      mostZoom,
+    );
+    const offset = fromMiddle({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    setView(clampView(zoomAround(active.anchor, offset, zoom, fitUnit), frame, mostZoom));
+  }
+
+  /** Any pointer let go (a mouse button too). */
+  function liftFinger(pointerId: number) {
+    fingers.current.delete(pointerId);
+    pressing.current = fingers.current.size > 0;
+    // A third finger may take over from the one lifted: the pinch starts again from here.
+    if (pinch.current) {
+      if (fingers.current.size >= 2) startPinch();
+      else pinch.current = null;
+    }
+  }
+
+  /** A step of the buttons or the keys, said out loud for screen readers. */
+  function zoomStep(target: number) {
+    const zoom = clamp(target, 1, mostZoom);
+    if (Math.abs(zoom - shown.zoom) < 1e-6) return;
+    zoomTo(zoom);
+    onAnnounce(t.announce.zoom(Math.round(zoom * 100)));
+  }
+
+  function onPlanKeyDown(event: KeyboardEvent) {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.target instanceof HTMLInputElement) return;
+    if (event.key === "+" || event.key === "=") zoomStep(shown.zoom * ZOOM_STEP);
+    else if (event.key === "-" || event.key === "_") zoomStep(shown.zoom / ZOOM_STEP);
+    else if (event.key === "0") zoomStep(1);
+    else return;
+    event.preventDefault();
+  }
   const gridStep = zone.width > 4000 || zone.height > 4000 ? 100 : 50;
 
   const problems = new Map<string, number>();
@@ -174,8 +427,10 @@ export function PlanCanvas(props: PlanCanvasProps) {
   }
 
   function startGesture(event: PointerEvent, table: Table, kind: Gesture["kind"]) {
-    event.stopPropagation();
     onSelect(table.id);
+    // Read-only and zoomed in, the press carries on to the plan, which moves around.
+    if (!editable && zoomed) return;
+    event.stopPropagation();
     // Holding the touch (see below) also stops the browser focusing the table, so do it here:
     // a tablet with a keyboard can then use the arrows straight away.
     if (event.pointerType !== "mouse" && event.currentTarget instanceof Element) {
@@ -199,6 +454,15 @@ export function PlanCanvas(props: PlanCanvasProps) {
   }
 
   function onPointerMove(event: PointerEvent) {
+    const panning = pan.current;
+    if (panning?.pointerId === event.pointerId) {
+      const center = {
+        x: panning.center.x - (event.clientX - panning.x) * panning.unit,
+        y: panning.center.y - (event.clientY - panning.y) * panning.unit,
+      };
+      setView(clampView({ zoom: shown.zoom, center }, frame, mostZoom));
+      return;
+    }
     const active = gesture.current;
     if (active?.pointerId !== event.pointerId) return;
     const point = toPlan(event);
@@ -272,6 +536,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
       const x = clamp(table.x + move.x, -MAX_CM, MAX_CM);
       const y = clamp(table.y + move.y, -MAX_CM, MAX_CM);
       onSelect(table.id);
+      follow.current = true;
       onChange(table.id, { x, y });
       onAnnounce(t.announce.moved(table.label, format.meters(x), format.meters(y)));
     } else if (event.key.toLowerCase() === "r" && !event.ctrlKey && !event.metaKey) {
@@ -293,23 +558,57 @@ export function PlanCanvas(props: PlanCanvasProps) {
   const tick = 6 * unit;
 
   return (
-    <div className="plan-canvas">
+    <div className="plan-canvas" onKeyDown={onPlanKeyDown}>
       <p id={helpId} className="visually-hidden">
         {editable ? t.plan.help : t.plan.helpReadOnly}
       </p>
       <svg
         ref={svgRef}
-        className={editable ? "plan-svg is-editable" : "plan-svg"}
+        className={["plan-svg", editable && "is-editable", zoomed && "is-zoomed"]
+          .filter(Boolean)
+          .join(" ")}
         // Keyboard focus lands here when the focused table is removed.
         tabIndex={-1}
         data-plan-canvas=""
-        viewBox={`${String(-pad)} ${String(-pad)} ${String(zone.width + 2 * pad)} ${String(zone.height + 2 * pad)}`}
+        viewBox={`${String(box.x)} ${String(box.y)} ${String(box.width)} ${String(box.height)}`}
         preserveAspectRatio="xMidYMid meet"
         role="group"
         aria-label={t.plan.label(zone.name, format.meters(zone.width), format.meters(zone.height))}
         aria-describedby={helpId}
+        // Every finger is counted first, before a table takes it, so that two make a pinch.
+        onPointerDownCapture={(event) => {
+          pressing.current = true;
+          follow.current = false;
+          if (event.pointerType !== "touch") return;
+          // The first finger of a new touch: any finger whose lifting was missed is gone.
+          if (event.isPrimary) {
+            fingers.current.clear();
+            pinch.current = null;
+          }
+          fingers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          if (fingers.current.size === 2) startPinch();
+          if (fingers.current.size > 1) event.stopPropagation();
+        }}
+        onPointerMoveCapture={(event) => {
+          if (!fingers.current.has(event.pointerId)) return;
+          fingers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          if (pinch.current) {
+            event.stopPropagation();
+            movePinch();
+          }
+        }}
+        onPointerUpCapture={(event) => {
+          liftFinger(event.pointerId);
+        }}
+        onPointerCancelCapture={(event) => {
+          liftFinger(event.pointerId);
+        }}
+        onLostPointerCapture={(event) => {
+          if (pan.current?.pointerId === event.pointerId) pan.current = null;
+        }}
         onPointerMove={onPointerMove}
         onPointerUp={(event) => {
+          if (pan.current?.pointerId === event.pointerId) pan.current = null;
           endGesture(event);
           const pressed = tap.current;
           if (pressed?.pointerId !== event.pointerId) return;
@@ -317,11 +616,31 @@ export function PlanCanvas(props: PlanCanvasProps) {
           if (Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) < 10) onSelect(null);
         }}
         onPointerCancel={(event) => {
+          if (pan.current?.pointerId === event.pointerId) pan.current = null;
           // The browser took the touch over to scroll: the table stays selected.
           if (tap.current?.pointerId === event.pointerId) tap.current = null;
           if (gesture.current?.pointerId === event.pointerId) cancelGesture();
         }}
         onPointerDown={(event) => {
+          if (pinch.current) return;
+          // Zoomed in, dragging the free space moves around the plan; letting go without moving
+          // is still a tap that lets go of the table.
+          if (zoomed && (event.pointerType !== "mouse" || event.button === 0)) {
+            pan.current = {
+              pointerId: event.pointerId,
+              x: event.clientX,
+              y: event.clientY,
+              center: shown.center,
+              unit,
+            };
+            svgRef.current?.setPointerCapture(event.pointerId);
+            // A tap on a table (read-only) keeps it chosen; a tap on the floor lets go.
+            const onTable = event.target instanceof Element && event.target.closest(".plan-table");
+            tap.current = onTable
+              ? null
+              : { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+            return;
+          }
           // A mouse lets go at once. A finger may be starting to scroll down to the panel, so it
           // waits to see whether this is a tap.
           if (event.pointerType === "mouse") onSelect(null);
@@ -449,6 +768,8 @@ export function PlanCanvas(props: PlanCanvasProps) {
               onTableKeyDown(event, table);
             }}
             onFocus={() => {
+              // Focus from the keyboard or the editor, not from a press on the plan.
+              if (!pressing.current) follow.current = true;
               onSelect(table.id);
             }}
           />
@@ -482,6 +803,54 @@ export function PlanCanvas(props: PlanCanvasProps) {
           ))}
         </g>
       </svg>
+      <div className="plan-tools">
+        <div className="zoom-controls" role="group" aria-label={t.plan.zoom}>
+          <button
+            type="button"
+            className="button zoom-button"
+            aria-label={t.plan.zoomOut}
+            title={t.plan.zoomOut}
+            // Not `disabled`, so the keyboard focus stays on the button at the end of the range.
+            aria-disabled={!zoomed}
+            onClick={() => {
+              if (zoomed) zoomStep(shown.zoom / ZOOM_STEP);
+            }}
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <path d="M5 10h10" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="button zoom-button"
+            aria-label={t.plan.zoomFit}
+            title={t.plan.zoomFit}
+            aria-disabled={!zoomed}
+            onClick={() => {
+              if (zoomed) zoomStep(1);
+            }}
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <path d="M3 7.5V3h4.5M12.5 3H17v4.5M17 12.5V17h-4.5M7.5 17H3v-4.5" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="button zoom-button"
+            aria-label={t.plan.zoomIn}
+            title={t.plan.zoomIn}
+            aria-disabled={shown.zoom >= mostZoom}
+            onClick={() => {
+              if (shown.zoom < mostZoom) zoomStep(shown.zoom * ZOOM_STEP);
+            }}
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <path d="M5 10h10M10 5v10" />
+            </svg>
+          </button>
+        </div>
+        {props.tools}
+      </div>
     </div>
   );
 }

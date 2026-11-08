@@ -380,16 +380,12 @@ export function Editor({
             onChange={change}
             onRemove={remove}
             onAnnounce={setAnnouncement}
+            tools={<ShortcutsButton editable={editable} />}
             tableRef={(id, element) => {
               if (element) tableElements.current.set(id, element);
               else tableElements.current.delete(id);
             }}
           />
-          {editable && (
-            <div className="plan-tools">
-              <ShortcutsButton />
-            </div>
-          )}
           {draft.tables.length === 0 && (
             <p className="canvas-empty">{editable ? t.plan.empty : t.plan.emptyReadOnly}</p>
           )}
@@ -486,7 +482,7 @@ export function Editor({
  * a click or a tap (not on hover, which touch screens do not have) and closes with Escape, the
  * button again, or a click outside.
  */
-function ShortcutsButton() {
+function ShortcutsButton({ editable }: { editable: boolean }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -533,14 +529,16 @@ function ShortcutsButton() {
       <div id={id} className="shortcuts-popover" hidden={!open}>
         <h2>{t.plan.shortcutsTitle}</h2>
         <dl>
-          {t.plan.shortcuts.map(([keys, action]) => (
-            <div key={keys}>
-              <dt>
-                <kbd>{keys}</kbd>
-              </dt>
-              <dd>{action}</dd>
-            </div>
-          ))}
+          {[...t.plan.viewShortcuts, ...(editable ? t.plan.shortcuts : [])].map(
+            ([keys, action]) => (
+              <div key={keys}>
+                <dt>
+                  <kbd>{keys}</kbd>
+                </dt>
+                <dd>{action}</dd>
+              </div>
+            ),
+          )}
         </dl>
       </div>
     </div>

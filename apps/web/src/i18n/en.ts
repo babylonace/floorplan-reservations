@@ -126,8 +126,9 @@ export const en = {
   plan: {
     label: (zone: string, width: string, depth: string) =>
       `Floor plan of ${zone}, ${width} wide and ${depth} deep`,
-    help: "Tab moves from table to table. The arrow keys move the selected table by 5 cm, or 50 cm with Shift. R turns it 15 degrees, Shift+R the other way. Delete removes it. Escape lets go.",
-    helpReadOnly: "Tab moves from table to table.",
+    help: "Tab moves from table to table. The arrow keys move the selected table by 5 cm, or 50 cm with Shift. R turns it 15 degrees, Shift+R the other way. Delete removes it. Escape lets go. Plus and minus zoom the plan in and out; 0 shows all of it.",
+    helpReadOnly:
+      "Tab moves from table to table. Plus and minus zoom the plan in and out; 0 shows all of it.",
     empty: "Empty zone. Add a table with the buttons above.",
     emptyReadOnly: "This zone has no tables yet.",
     /** Under the table's name on the plan, where there is little room. */
@@ -153,9 +154,19 @@ export const en = {
         .filter(Boolean)
         .join(", "),
     toolbar: "Plan tools",
+    zoom: "Zoom",
+    zoomIn: "Zoom in",
+    zoomOut: "Zoom out",
+    zoomFit: "Show the whole plan",
     shortcutsTitle: "Keyboard shortcuts",
-    shortcuts: [
+    viewShortcuts: [
       ["Tab", "next table"],
+      ["+ / −", "zoom in or out"],
+      ["0", "show the whole plan"],
+      ["Ctrl + wheel", "zoom where the pointer is"],
+      ["Drag the floor", "move around, zoomed in"],
+    ] as [string, string][],
+    shortcuts: [
       ["Arrows", "move 5 cm"],
       ["Shift + arrows", "move 50 cm"],
       ["R / Shift + R", "turn 15°"],
@@ -208,6 +219,7 @@ export const en = {
       `Table ${label} is now ${width} by ${depth}.`,
     removed: (label: string) => `Table ${label} removed. Save to make it final.`,
     added: (label: string) => `Table ${label} added.`,
+    zoom: (percent: number) => `Zoom ${String(percent)}%.`,
     addedInLine: (label: string, after: string) => `Bar section ${label} added after ${after}.`,
   },
   errors: {
