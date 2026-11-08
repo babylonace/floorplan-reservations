@@ -6,6 +6,7 @@ import {
   createVenue,
   deleteVenue,
   newGuestEmail,
+  ownerCookie,
   TEST_APP_OPTIONS,
   testDatabaseUrl,
   type TestTable,
@@ -46,10 +47,12 @@ interface FloorPlan {
 
 const pool = createPool(testDatabaseUrl(), { max: 20 });
 let app: FastifyInstance;
+let cookie: string;
 const slugs: string[] = [];
 
 beforeAll(async () => {
   app = await buildApp({ pool, ...TEST_APP_OPTIONS });
+  cookie = await ownerCookie(app);
 });
 
 afterEach(async () => {
@@ -74,7 +77,7 @@ async function venueWith(slug: string, tables: TestTable[] = []) {
 }
 
 function call(method: "POST" | "PATCH" | "DELETE" | "GET", url: string, payload?: object) {
-  return app.inject({ method, url, ...(payload ? { payload } : {}) });
+  return app.inject({ method, url, headers: { cookie }, ...(payload ? { payload } : {}) });
 }
 
 async function floorPlan(slug: string): Promise<FloorPlan> {
@@ -160,7 +163,8 @@ describe("zones", () => {
       width: 10,
       height: 10,
     });
-    expect(noVenue.statusCode).toBe(404);
+    // Nobody runs a venue that does not exist, so the change is refused before it is looked for.
+    expect(noVenue.statusCode).toBe(403);
   });
 
   it("renames, reorders and resizes a zone", async () => {

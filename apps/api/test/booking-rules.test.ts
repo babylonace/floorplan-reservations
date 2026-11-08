@@ -2,7 +2,13 @@ import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { createPool } from "../src/db.js";
-import { createVenue, deleteVenue, TEST_APP_OPTIONS, testDatabaseUrl } from "./helpers.js";
+import {
+  createVenue,
+  deleteVenue,
+  ownerCookie,
+  TEST_APP_OPTIONS,
+  testDatabaseUrl,
+} from "./helpers.js";
 
 interface Rules {
   horizonDays: number;
@@ -12,10 +18,12 @@ interface Rules {
 
 const pool = createPool(testDatabaseUrl());
 let app: FastifyInstance;
+let cookie: string;
 const slugs: string[] = [];
 
 beforeAll(async () => {
   app = await buildApp({ pool, ...TEST_APP_OPTIONS });
+  cookie = await ownerCookie(app);
 });
 
 afterEach(async () => {
@@ -33,7 +41,12 @@ async function venue(slug: string) {
 }
 
 function put(slug: string, rules: object) {
-  return app.inject({ method: "PUT", url: `/venues/${slug}/booking-rules`, payload: rules });
+  return app.inject({
+    method: "PUT",
+    url: `/venues/${slug}/booking-rules`,
+    headers: { cookie },
+    payload: rules,
+  });
 }
 
 async function get(slug: string): Promise<Rules> {
@@ -130,7 +143,8 @@ describe("GET and PUT /venues/:slug/booking-rules", () => {
   });
 
   it("returns 404 for a venue that does not exist", async () => {
-    expect((await put("nowhere", RULES)).statusCode).toBe(404);
+    // Nobody runs a venue that does not exist, so changing its rules is refused first.
+    expect((await put("nowhere", RULES)).statusCode).toBe(403);
     const response = await app.inject({ method: "GET", url: "/venues/nowhere/booking-rules" });
     expect(response.statusCode).toBe(404);
   });

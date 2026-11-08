@@ -4,7 +4,7 @@ Table reservations for restaurants, where the venue draws its own floor plan and
 
 [Leer en español](README.es.md)
 
-> **Status: early.** The API can take a booking, the database refuses double bookings, and staff can edit the floor plan through the API. Public bookings respect opening hours, a booking horizon and per-address limits. There is no login, drawing screen, booking page or staff screen yet. See the [roadmap](#roadmap).
+> **Status: early.** The API can take a booking, the database refuses double bookings, and owners can edit the floor plan through the API. Public bookings respect opening hours, a booking horizon and per-address limits. Staff sign in with a password, and only a venue's owners can change it. There is no drawing screen, booking page or staff screen yet. See the [roadmap](#roadmap).
 
 ## Why
 
@@ -32,8 +32,10 @@ Out of scope: orders, kitchen screens, point of sale.
   - `POST /venues/:slug/reservations` books a table. The engine picks the table (or tables), and how long it is kept depends on the party size. It answers `409` when nothing is free. See [limits on public bookings](#limits-on-public-bookings).
   - `GET` and `PUT /venues/:slug/booking-rules` read and replace how far ahead guests may book and the opening hours.
   - Floor plan editing: `POST /venues/:slug/zones`, `PATCH` and `DELETE /venues/:slug/zones/:zoneId`, `POST /venues/:slug/zones/:zoneId/tables`, `PATCH` and `DELETE /venues/:slug/tables/:tableId`. See [editing the plan](#editing-the-plan).
+  - Staff sign-in: `POST /auth/login`, `POST /auth/logout` and `GET /auth/me`. See [staff accounts and sign-in](#staff-accounts-and-sign-in).
   - `GET /health` checks that the API can reach the database.
   - `GET /openapi.json` describes the API (OpenAPI 3.1).
+- `npm run staff`: the command line that creates the first owner and manages staff accounts.
 - `db/migrations`: the schema, as plain SQL files. A small runner applies them in order, each in a transaction, behind a lock so two copies of the app can't migrate at the same time.
 - `db/seed/sample.sql`: a made-up venue to play with.
 
@@ -83,9 +85,30 @@ CI runs the same checks on every pull request against PostgreSQL 18, and also bu
 - `style` is free-form JSON for the plan editor (colours and the like). The booking engine never reads it.
 - One reservation can take several tables (`reservation_tables`), for groups seated at tables pushed together.
 
+## Staff accounts and sign-in
+
+Guests book without an account. Staff sign in with their e-mail address and a password, and changing a venue needs an account with the right role **at that venue**.
+
+- **Roles.** `owner` may change the floor plan and the booking rules. `staff` is for the coming staff screen (today's bookings) and may not change either. One account can run several venues, with a different role at each.
+- **Who may do what.** Every plan editing route and `PUT /venues/:slug/booking-rules` answer `401` without a session and `403` when the account is not an owner of that venue. Reading the plan, reading the rules and booking stay open to everyone. A role taken away stops working on the very next request.
+- **First account.** There is no default user and no password in the code. Create the first owner from the command line; it asks for the password twice without showing it:
+
+  ```bash
+  npm run staff -- add --venue sample-bistro --email you@example.com --role owner
+  ```
+
+  With Docker: `docker compose exec api node apps/api/dist/staff-cli.js add --venue sample-bistro --email you@example.com --role owner`. The same command adds an existing account to another venue or changes its role. Other commands: `password` (new password, signs the account out everywhere), `remove` (takes the account off a venue), `sign-out` (ends all its sessions) and `list`. Run `npm run staff` to see them all. In a script, pipe the password in on standard input, one line per question; never pass it as an argument.
+
+- **Passwords** must have 12 to 200 characters. They are stored as scrypt hashes, each with its own random salt, and checked in constant time.
+- **Signing in.** `POST /auth/login` with `{ "email", "password" }` sets the session cookie. `GET /auth/me` says who is signed in and which venues they run. `POST /auth/logout` ends the session.
+- **Sessions** live in PostgreSQL, which only keeps a SHA-256 of each token. A session ends after 12 hours without use and 30 days after sign-in at the latest. Signing in again in the same browser replaces the old session, and a new password ends every session of the account.
+- **The cookie** is `__Host-floorplan_session`: `HttpOnly` (page scripts can't read it), `Secure` (HTTPS only; browsers also accept it on `http://localhost`) and `SameSite=Strict` (other sites can't send it). Requests that a browser marks as started by another site (`Sec-Fetch-Site: cross-site` or `same-site`) are refused with `403` on every route that needs a session, and on sign-in.
+- **Failed sign-ins.** A wrong password and an unknown address get the same answer, and take about as long. After 10 failed attempts for one address in 15 minutes, that address gets `429` until the 15 minutes are over, even with the right password. The count is kept in PostgreSQL per address, whether or not it has an account, so it works across several copies of the API and gives nothing away. Each network address can also send 30 sign-in requests every 15 minutes (`LOGIN_RATE_LIMIT_MAX` and `LOGIN_RATE_LIMIT_WINDOW_MINUTES`). Someone who knows a staff member's address can keep that address locked out by failing on purpose; `TRUST_PROXY` matters here too.
+- **Not yet:** signing in with a link by e-mail (it comes when the API can send e-mails), two-factor codes, and managing staff from a screen.
+
 ## Editing the plan
 
-Zones and tables can be added, changed and removed through the API: position, size, shape, rotation, style, zone and whether the table can be booked online.
+Owners of a venue can add, change and remove its zones and tables through the API: position, size, shape, rotation, style, zone and whether the table can be booked online.
 
 - Every change is checked with `validateZone` against what is stored. A change that would make a table overlap another one, stick out of its zone or have impossible seats is refused with `422` and the list of problems. Problems the plan already had don't block unrelated edits.
 - Changes never leave an upcoming reservation without room. Taking away seats it needs, moving the tables it holds together apart, making one of them round or moving one of them to another zone is refused with `409`. A table booked on its own can still be moved, even to another zone: the party keeps it.
@@ -93,8 +116,6 @@ Zones and tables can be added, changed and removed through the API: position, si
 - A venue can have up to 50 zones and a zone up to 200 tables.
 - A table with an upcoming reservation can't be removed. A table that was only booked in the past is **retired** instead of deleted: it leaves the plan and the engine, and old reservations still point at it. Its label is free again. Removing a zone works the same way for all its tables.
 - Edits to the same zone take turns (they lock the zone, then the tables). A booking that had to wait for an edit of its tables reads the plan again before it is saved, so it can't land on a table that just lost its seats or stopped being bookable.
-
-> **No login yet.** These routes are open to anyone who can reach the API. Don't put it on the internet until staff login lands.
 
 ## How double bookings are stopped
 
@@ -118,9 +139,7 @@ Booking needs no account, so the endpoint protects itself:
 - **Requests per address.** Each address can send 10 booking requests every 15 minutes (set with `BOOKING_RATE_LIMIT_MAX` and `BOOKING_RATE_LIMIT_WINDOW_MINUTES`); after that it gets `429` with `Retry-After`. Failed requests count too. An IPv6 `/64` counts as one address. The counts live in the API's memory, so each copy of the API counts on its own and a restart resets them. Guests behind one shared address (a mobile carrier, the venue's own Wi-Fi) share one limit. There is no cap per venue yet.
 - **Behind a proxy**, set `TRUST_PROXY` to the proxy's address (for example `127.0.0.1`). Otherwise every guest looks like the proxy and they all share one limit. `X-Forwarded-For` is only believed from the addresses listed there. With Docker Compose, the API sees the proxy through Docker's network (an address such as `172.17.0.1`), not as `127.0.0.1`: list that address or range instead.
 
-Staff set the rules with `PUT /venues/:slug/booking-rules`, which replaces them all at once. Bookings already made are kept even if they now fall outside the hours.
-
-> **No login yet** for `PUT /venues/:slug/booking-rules` either, same as the plan editing routes: anyone who can reach the API could widen the hours or the horizon. Don't put it on the internet until staff login lands.
+Owners set the rules with `PUT /venues/:slug/booking-rules`, which replaces them all at once. Bookings already made are kept even if they now fall outside the hours.
 
 ## Roadmap
 
