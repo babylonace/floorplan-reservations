@@ -310,7 +310,7 @@ export function NumberField({
         }}
       />
       {hint && (
-        <p id={`${id}-hint`} className="field-hint">
+        <p id={`${id}-hint`} className="visually-hidden">
           {hint}
         </p>
       )}
@@ -394,7 +394,7 @@ export function MetreField({
         }}
       />
       {hint && (
-        <p id={`${id}-hint`} className="field-hint">
+        <p id={`${id}-hint`} className="visually-hidden">
           {hint}
         </p>
       )}

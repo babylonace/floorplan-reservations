@@ -29,7 +29,6 @@ export const en = {
   },
   login: {
     title: "Floor plan",
-    intro: "Sign in with the account your venue gave you to arrange its rooms and tables.",
     email: "E-mail address",
     password: "Password",
     submit: "Sign in",
@@ -50,18 +49,18 @@ export const en = {
     loadingPlan: "Loading the floor plan…",
     loadFailed: "The floor plan could not be loaded.",
     retry: "Try again",
-    readOnly: "You can look at the floor plan. Only the venue's owner can change it.",
+    readOnly: "View only: the venue's owner makes the changes.",
   },
   zones: {
     listLabel: "Zones",
     add: "New zone",
-    none: "This venue has no zones yet. Create the first one, such as a dining room or a terrace, to start placing tables.",
+    none: "No zones yet. Create the first one.",
     noneReadOnly: "This venue has no zones yet.",
     newTitle: "New zone",
     name: "Name",
     width: "Width (m)",
     height: "Depth (m)",
-    sizeHint: "In metres. Decimals are fine: 4.5 is four and a half metres.",
+    sizeHint: "In metres; decimals are fine, such as 4.5.",
     sortOrder: "Position in the list",
     sortOrderHint: "Zones with lower numbers come first.",
     create: "Create zone",
@@ -94,8 +93,9 @@ export const en = {
     shape: "Shape",
     rect: "Rectangular",
     round: "Round",
-    minSeats: "Fewest guests",
-    maxSeats: "Most guests",
+    guests: "Guests",
+    minSeats: "Fewest",
+    maxSeats: "Most",
     width: "Width (m)",
     height: "Depth (m)",
     rotation: "Turn (degrees)",
@@ -108,9 +108,8 @@ export const en = {
     sides: { top: "Top", right: "Right", bottom: "Bottom", left: "Left" },
     sidesLegend: "Sides with seats",
     sidesHint:
-      "Sides of the table before it is turned. A bar or a table against the wall has seats on one side. Tables are never pushed together along a side with seats, so with all four ticked this table is never joined to another; “All around” joins as usual. At least one side stays ticked.",
-    barHint:
-      "Bar section: guests can book one section, and a group gets several sections next to each other in a line. Add more with “Add bar section” while this one is selected. At least one side stays ticked.",
+      "Sides of the table before it is turned. Tables are never joined along a side with seats.",
+    barHint: "Bar section: a group takes several sections next to each other, in a line.",
     bookable: "Can be booked online",
     bookableHint: "When unticked, the table stays on the plan but guests cannot book it online.",
     color: "Colour",
@@ -122,15 +121,14 @@ export const en = {
       slate: "Slate",
     },
     remove: "Remove table",
-    noSelection: "Pick a table on the plan to change it, or add a new one.",
-    newBadge: "New, not saved yet",
+    newBadge: "New",
   },
   plan: {
     label: (zone: string, width: string, depth: string) =>
       `Floor plan of ${zone}, ${width} wide and ${depth} deep`,
     help: "Tab moves from table to table. The arrow keys move the selected table by 5 cm, or 50 cm with Shift. R turns it 15 degrees, Shift+R the other way. Delete removes it. Escape lets go.",
     helpReadOnly: "Tab moves from table to table.",
-    empty: "This zone is empty. Add the first table with the buttons above.",
+    empty: "Empty zone. Add a table with the buttons above.",
     emptyReadOnly: "This zone has no tables yet.",
     /** Under the table's name on the plan, where there is little room. */
     seats: (min: number, max: number) =>
@@ -168,7 +166,6 @@ export const en = {
   },
   issues: {
     title: "Problems in the plan",
-    none: "No problems: no table sticks out of the zone or sits on another.",
     noneShort: "No problems",
     count: (n: number) => plural(n, "1 problem", `${String(n)} problems`),
     overlap: (a: string, b: string) => `Tables ${a} and ${b} overlap.`,
@@ -236,8 +233,7 @@ export const en = {
     zoneInvalid: "The zone cannot be that small, because:",
     rejected: "the server did not accept one of the values. Check the fields and try again.",
     dismiss: "Close message",
-    metres: (min: string, max: string) =>
-      `Type a length between ${min} and ${max}, such as 1.2. Leaving the field keeps the last good one.`,
+    metres: (min: string, max: string) => `Between ${min} and ${max}.`,
   },
   dialog: {
     cancel: "Cancel",

@@ -1,10 +1,8 @@
 import {
   boundingBox,
-  isOneSided,
   normalizeSides,
   type Box,
   type PlanIssue,
-  type TableSide,
 } from "@floorplan-reservations/engine";
 import {
   useEffect,
@@ -30,7 +28,7 @@ import {
   SNAP_CM,
   TURN_STEP,
   type Point,
-  shareSeats,
+  chairLayout,
 } from "../plan/geometry";
 
 /**
@@ -620,83 +618,15 @@ function TableShape({
 
 /**
  * Chairs around the table, one per seat, as a drawing aid. They are not part of the checks.
- * A table that says which sides have seats only gets chairs there, shared out by length; a
- * table with seats on one side only (a bar, a table by the wall) gets round stools.
+ * They are all round, like bar stools, and shrink when they would touch each other.
  */
 function Chairs({ table, unit }: { table: Table; unit: number }) {
-  const seats = Math.min(table.maxSeats, 16);
-  const chair = { w: 34, d: 14, gap: 5 };
-  const stool = { r: 15, gap: 4 };
-  const chairs: { x: number; y: number; angle: number }[] = [];
-  const stools = isOneSided(table);
-  if (table.shape === "round") {
-    const rx = table.width / 2 + chair.gap + chair.d / 2;
-    const ry = table.height / 2 + chair.gap + chair.d / 2;
-    for (let i = 0; i < seats; i++) {
-      const angle = (i / seats) * 2 * Math.PI - Math.PI / 2;
-      chairs.push({
-        x: Math.cos(angle) * rx,
-        y: Math.sin(angle) * ry,
-        angle: (angle * 180) / Math.PI + 90,
-      });
-    }
-  } else if (table.seatSides) {
-    const sides = normalizeSides(table.seatSides);
-    const across = (side: TableSide) => side === "top" || side === "bottom";
-    const counts = shareSeats(
-      seats,
-      sides.map((side) => (across(side) ? table.width : table.height)),
-    );
-    const out = stools ? stool.gap + stool.r : chair.gap + chair.d / 2;
-    sides.forEach((side, index) => {
-      const count = counts[index] ?? 0;
-      const length = across(side) ? table.width : table.height;
-      const depth = (across(side) ? table.height : table.width) / 2 + out;
-      for (let i = 0; i < count; i++) {
-        const along = -length / 2 + ((i + 0.5) * length) / count;
-        if (side === "top") chairs.push({ x: along, y: -depth, angle: 0 });
-        else if (side === "bottom") chairs.push({ x: along, y: depth, angle: 180 });
-        else if (side === "left") chairs.push({ x: -depth, y: along, angle: 270 });
-        else chairs.push({ x: depth, y: along, angle: 90 });
-      }
-    });
-  } else {
-    const alongWidth = table.width >= table.height;
-    const length = alongWidth ? table.width : table.height;
-    const depth = (alongWidth ? table.height : table.width) / 2 + chair.gap + chair.d / 2;
-    const first = Math.ceil(seats / 2);
-    const sides = [
-      { count: first, sign: -1 },
-      { count: seats - first, sign: 1 },
-    ];
-    for (const { count, sign } of sides) {
-      for (let i = 0; i < count; i++) {
-        const along = -length / 2 + ((i + 0.5) * length) / count;
-        chairs.push(
-          alongWidth
-            ? { x: along, y: sign * depth, angle: sign < 0 ? 0 : 180 }
-            : { x: sign * depth, y: along, angle: sign < 0 ? 270 : 90 },
-        );
-      }
-    }
-  }
+  const { radius, chairs } = chairLayout(table);
   return (
-    <g className={stools ? "chairs stools" : "chairs"} aria-hidden="true" strokeWidth={unit}>
-      {chairs.map((c, index) =>
-        stools ? (
-          <circle key={index} cx={c.x} cy={c.y} r={stool.r} />
-        ) : (
-          <rect
-            key={index}
-            x={-chair.w / 2}
-            y={-chair.d / 2}
-            width={chair.w}
-            height={chair.d}
-            rx={chair.d / 2.5}
-            transform={`translate(${String(c.x)} ${String(c.y)}) rotate(${String(c.angle)})`}
-          />
-        ),
-      )}
+    <g className="chairs" aria-hidden="true" strokeWidth={unit}>
+      {chairs.map((c, index) => (
+        <circle key={index} cx={c.x} cy={c.y} r={radius} />
+      ))}
     </g>
   );
 }

@@ -134,9 +134,7 @@ describe("the plan editor", () => {
     await user.clear(width);
     await user.type(width, "ancho");
     expect(width).toHaveAttribute("aria-invalid", "true");
-    expect(width).toHaveAccessibleDescription(
-      "Escribe una medida entre 0,3 m y 1000 m, como 1,2. Al salir del campo se queda la última buena.",
-    );
+    expect(width).toHaveAccessibleDescription("Entre 0,3 m y 1000 m.");
     await user.tab();
     expect(width).toHaveValue("1,5");
     expect(depth).toHaveValue("0,75");
@@ -163,7 +161,11 @@ describe("the plan editor", () => {
     const first = await screen.findByRole("button", { name: /^Mesa B1,/ });
     expect(first).toHaveFocus();
     expect(first).toHaveAccessibleName(/asientos en un solo lado/);
-    expect(screen.getByText(/Tramo de barra: se puede reservar un tramo solo/)).toBeInTheDocument();
+    // The help is for screen readers only: the panel shows short labels.
+    expect(screen.getByRole("group", { name: "Lados con asientos" })).toHaveAccessibleDescription(
+      /^Tramo de barra: un grupo ocupa varios tramos seguidos/,
+    );
+    expect(screen.getByText(/Tramo de barra/)).toHaveClass("visually-hidden");
     expect(screen.getByLabelText("Abajo")).toBeChecked();
     expect(screen.getByLabelText("Abajo")).toBeDisabled();
     const leftOf = () =>
@@ -223,6 +225,48 @@ describe("the plan editor", () => {
     expect(screen.getByText("1 cambio sin guardar")).toBeInTheDocument();
   });
 
+  it("keeps the keyboard shortcuts behind a button, and closes them with Escape", async () => {
+    const user = userEvent.setup();
+    renderApp(signedInApi());
+    const button = await screen.findByRole("button", { name: "Atajos de teclado" });
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("heading", { name: "Atajos de teclado" })).not.toBeInTheDocument();
+
+    await user.click(button);
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("heading", { name: "Atajos de teclado" })).toBeVisible();
+    expect(screen.getByText("girar 15°")).toBeVisible();
+
+    await user.keyboard("{Escape}");
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    expect(button).toHaveFocus();
+
+    // Pressing a table closes it too, though tables keep their pointer events to themselves.
+    // (jsdom cannot place a pointer on the plan, so the drag that starts finds no point.)
+    Object.defineProperty(SVGSVGElement.prototype, "getScreenCTM", {
+      configurable: true,
+      value: () => null,
+    });
+    await user.click(button);
+    await user.pointer({ keys: "[MouseLeft>]", target: await findTable("1") });
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    await user.pointer({ keys: "[/MouseLeft]" });
+    Reflect.deleteProperty(SVGSVGElement.prototype, "getScreenCTM");
+
+    // Escape closes it wherever the focus is, and does not also let go of the table.
+    await user.click(button);
+    (await findTable("1")).focus();
+    await user.keyboard("{Escape}");
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    expect(await findTable("1")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows no problems section while the plan has none", async () => {
+    renderApp(signedInApi());
+    expect(await screen.findByText("Sin problemas")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Problemas en el plano" })).toBeNull();
+  });
+
   it("shows tables that overlap, and names them", async () => {
     const user = userEvent.setup();
     renderApp(signedInApi());
@@ -253,12 +297,12 @@ describe("the plan editor", () => {
     expect(screen.getByText("Ponle un nombre o un número.")).toBeInTheDocument();
     await user.type(label, "Ventana");
     await user.click(screen.getByLabelText("Redonda"));
-    await user.click(screen.getByLabelText("Nogal"));
+    await user.selectOptions(screen.getByLabelText("Color"), "Nogal");
     await user.click(screen.getByLabelText("Se puede reservar por internet"));
 
     await user.click(screen.getByRole("button", { name: "Añadir mesa redonda" }));
     expect(await findTable("3")).toHaveFocus();
-    expect(screen.getByText("Nueva, sin guardar")).toBeInTheDocument();
+    expect(screen.getByText("Nueva")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
     expect(await screen.findByText("2 cambios guardados.")).toBeInTheDocument();
@@ -461,7 +505,7 @@ describe("the plan editor", () => {
     });
     expect(screen.getByRole("button", { name: "Terraza" })).toHaveAttribute("aria-current", "true");
     expect(
-      screen.getByText("Esta zona está vacía. Añade la primera mesa con los botones de arriba."),
+      screen.getByText("Zona vacía. Añade una mesa con los botones de arriba."),
     ).toBeInTheDocument();
   });
 
@@ -493,9 +537,7 @@ describe("the plan editor", () => {
       }),
     );
     expect(
-      await screen.findByText(
-        "Puedes ver el plano. Solo la persona propietaria del local puede cambiarlo.",
-      ),
+      await screen.findByText("Solo lectura: los cambios los hace la persona propietaria."),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Añadir mesa rectangular" }),

@@ -25,7 +25,6 @@ export function LoginScreen({
         <SignInForm
           className="login-form"
           title={<h1>{t.login.title}</h1>}
-          intro={t.login.intro}
           notice={notice}
           onSignedIn={onSignedIn}
         />

@@ -15,7 +15,6 @@ export const es: DeepPartial<Messages> = {
   },
   login: {
     title: "Plano de sala",
-    intro: "Entra con la cuenta que te dio tu local para ordenar sus salas y sus mesas.",
     email: "Correo electrónico",
     password: "Contraseña",
     submit: "Entrar",
@@ -36,18 +35,18 @@ export const es: DeepPartial<Messages> = {
     loadingPlan: "Cargando el plano…",
     loadFailed: "No se pudo cargar el plano.",
     retry: "Volver a probar",
-    readOnly: "Puedes ver el plano. Solo la persona propietaria del local puede cambiarlo.",
+    readOnly: "Solo lectura: los cambios los hace la persona propietaria.",
   },
   zones: {
     listLabel: "Zonas",
     add: "Nueva zona",
-    none: "Este local todavía no tiene zonas. Crea la primera, como un comedor o una terraza, para empezar a colocar mesas.",
+    none: "Aún no hay zonas. Crea la primera.",
     noneReadOnly: "Este local todavía no tiene zonas.",
     newTitle: "Nueva zona",
     name: "Nombre",
     width: "Ancho (m)",
     height: "Fondo (m)",
-    sizeHint: "En metros. Puedes usar decimales: 4,5 son cuatro metros y medio.",
+    sizeHint: "En metros; con decimales, como 4,5.",
     sortOrder: "Orden en la lista",
     sortOrderHint: "Las zonas con números más bajos salen antes.",
     create: "Crear zona",
@@ -78,8 +77,9 @@ export const es: DeepPartial<Messages> = {
     shape: "Forma",
     rect: "Rectangular",
     round: "Redonda",
-    minSeats: "Mínimo de personas",
-    maxSeats: "Máximo de personas",
+    guests: "Personas",
+    minSeats: "Mínimo",
+    maxSeats: "Máximo",
     width: "Ancho (m)",
     height: "Fondo (m)",
     rotation: "Giro (grados)",
@@ -91,10 +91,8 @@ export const es: DeepPartial<Messages> = {
     seatsSides: "En algunos lados",
     sides: { top: "Arriba", right: "Derecha", bottom: "Abajo", left: "Izquierda" },
     sidesLegend: "Lados con asientos",
-    sidesHint:
-      "Lados de la mesa sin girar. Una barra o una mesa contra la pared tiene asientos en un solo lado. Las mesas nunca se juntan por un lado con asientos, así que con los cuatro marcados esta mesa no se junta con ninguna; con «Alrededor» se junta como siempre. Al menos un lado queda marcado.",
-    barHint:
-      "Tramo de barra: se puede reservar un tramo solo, y un grupo ocupa varios tramos seguidos, en línea. Añade más con «Añadir tramo de barra» mientras este está elegido. Al menos un lado queda marcado.",
+    sidesHint: "Lados de la mesa sin girar. Las mesas nunca se juntan por un lado con asientos.",
+    barHint: "Tramo de barra: un grupo ocupa varios tramos seguidos, en línea.",
     bookable: "Se puede reservar por internet",
     bookableHint:
       "Si la desmarcas, la mesa sigue en el plano pero no se ofrece en las reservas por internet.",
@@ -107,15 +105,14 @@ export const es: DeepPartial<Messages> = {
       slate: "Pizarra",
     },
     remove: "Quitar mesa",
-    noSelection: "Elige una mesa en el plano para cambiarla, o añade una nueva.",
-    newBadge: "Nueva, sin guardar",
+    newBadge: "Nueva",
   },
   plan: {
     label: (zone: string, width: string, depth: string) =>
       `Plano de ${zone}, de ${width} de ancho y ${depth} de fondo`,
     help: "Tab pasa de una mesa a otra. Las flechas mueven la mesa elegida 5 cm, o 50 cm con Mayús. R la gira 15 grados y Mayús+R al otro lado. Supr la quita. Esc la suelta.",
     helpReadOnly: "Tab pasa de una mesa a otra.",
-    empty: "Esta zona está vacía. Añade la primera mesa con los botones de arriba.",
+    empty: "Zona vacía. Añade una mesa con los botones de arriba.",
     emptyReadOnly: "Esta zona todavía no tiene mesas.",
     seats: (min: number, max: number) =>
       min === max ? String(min) : `${String(min)}–${String(max)}`,
@@ -152,7 +149,6 @@ export const es: DeepPartial<Messages> = {
   },
   issues: {
     title: "Problemas en el plano",
-    none: "Sin problemas: ninguna mesa se sale de la zona ni pisa a otra.",
     noneShort: "Sin problemas",
     count: (n: number) => plural(n, "1 problema", `${String(n)} problemas`),
     overlap: (a: string, b: string) => `Las mesas ${a} y ${b} se pisan.`,
@@ -219,8 +215,7 @@ export const es: DeepPartial<Messages> = {
     zoneInvalid: "La zona no puede ser tan pequeña, porque:",
     rejected: "el servidor no aceptó uno de los datos. Revisa los campos y vuelve a probar.",
     dismiss: "Cerrar aviso",
-    metres: (min: string, max: string) =>
-      `Escribe una medida entre ${min} y ${max}, como 1,2. Al salir del campo se queda la última buena.`,
+    metres: (min: string, max: string) => `Entre ${min} y ${max}.`,
   },
   dialog: {
     cancel: "Cancelar",

@@ -23,7 +23,7 @@
   --ok-soft: #e6f2e8;
   --radius-small: 4px;
   --radius: 8px;
-  --panel-width: 20rem;
+  --panel-width: 24rem;
   --font: "Atkinson Hyperlegible Next", system-ui, sans-serif;
 
   color-scheme: light;
@@ -205,6 +205,7 @@ select {
 .field input[type="email"],
 .field input[type="password"],
 .field input[type="number"],
+.field select,
 .venue-picker select {
   width: 100%;
   min-height: 2rem;
@@ -230,11 +231,6 @@ fieldset.field > .field-row > .field {
   margin-bottom: 0;
 }
 
-.field-hint {
-  font-size: 0.85rem;
-  color: var(--ink-soft);
-}
-
 .field-error {
   font-size: 0.85rem;
   color: var(--danger);
@@ -251,10 +247,6 @@ fieldset.field > .field-row > .field {
   height: 1.15rem;
   margin: 0.15rem 0 0;
   accent-color: var(--ink);
-}
-
-.field-check .field-hint {
-  grid-column: 2;
 }
 
 fieldset {
@@ -368,48 +360,24 @@ fieldset {
   justify-self: end;
 }
 
-.swatches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-}
-
-.swatch {
-  position: relative;
+/* The table's colour: a dropdown with a chip of the chosen colour beside it. */
+.color-select {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.15rem 0.5rem 0.15rem 0.25rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  font-size: 0.85rem;
-  cursor: pointer;
+  gap: 0.4rem;
 }
 
-.swatch input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  margin: 0;
-  cursor: pointer;
+.color-select select {
+  flex: 1;
+  min-width: 0;
 }
 
 .swatch-chip {
-  width: 1.1rem;
-  height: 1.1rem;
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
   border-radius: 50%;
   border: 1px solid rgb(23 33 30 / 35%);
-}
-
-.swatch:has(input:checked) {
-  border-color: var(--ink);
-  box-shadow: inset 0 0 0 1px var(--ink);
-  font-weight: 600;
-}
-
-.swatch:has(input:focus-visible) {
-  outline: 3px solid var(--ink);
-  outline-offset: 2px;
 }
 
 .form-actions,
@@ -964,8 +932,7 @@ fieldset {
   opacity: 0.7;
 }
 
-.chairs rect,
-.stools circle {
+.chairs circle {
   fill: rgb(23 33 30 / 14%);
   stroke: rgb(23 33 30 / 45%);
 }
@@ -1092,12 +1059,6 @@ fieldset {
   color: var(--ink-soft);
 }
 
-.panel-hint {
-  color: var(--ink-soft);
-  font-size: 0.9rem;
-  margin-bottom: 0.6rem;
-}
-
 .badge {
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
@@ -1140,21 +1101,61 @@ fieldset {
   margin-bottom: 0.5rem;
 }
 
-.shortcuts summary {
+/* Buttons that float in the top right corner of the plan. */
+.plan-tools {
+  position: absolute;
+  top: 0.6rem;
+  inset-inline-end: 0.6rem;
+  z-index: 5;
+  display: flex;
+  gap: 0.3rem;
+}
+
+.shortcuts {
+  position: relative;
+}
+
+.shortcuts-button {
+  width: 2rem;
+  padding: 0;
+  justify-content: center;
+  border-radius: 999px;
   font-weight: 700;
-  cursor: pointer;
+  box-shadow: 0 1px 3px rgb(23 33 30 / 25%);
+}
+
+.shortcuts-popover {
+  position: absolute;
+  inset-inline-end: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 30;
+  width: min(21rem, calc(100vw - 2rem));
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgb(23 33 30 / 18%);
+}
+
+.shortcuts-popover[hidden] {
+  display: none;
+}
+
+.shortcuts-popover h2 {
+  margin-bottom: 0.4rem;
+  font-size: 0.95rem;
 }
 
 .shortcuts dl {
   display: grid;
   gap: 0.3rem;
-  margin: 0.5rem 0 0;
+  margin: 0;
   font-size: 0.9rem;
 }
 
 .shortcuts dl div {
   display: grid;
-  grid-template-columns: 9rem 1fr;
+  grid-template-columns: 8.5rem 1fr;
   gap: 0.5rem;
 }
 
@@ -1304,6 +1305,7 @@ kbd {
   .field input[type="email"],
   .field input[type="password"],
   .field input[type="number"],
+  .field select,
   .venue-picker select {
     min-height: 2.75rem;
   }
@@ -1320,11 +1322,6 @@ kbd {
 
   .segmented span {
     padding-block: 0.7rem;
-  }
-
-  .swatch {
-    min-height: 2.75rem;
-    padding-inline-end: 0.75rem;
   }
 
   .field-check input,

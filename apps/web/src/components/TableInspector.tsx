@@ -133,35 +133,38 @@ export function TableInspector({
               </fieldset>
             )}
             {table.seatSides && (
-              <p id={`${ids}-sides-hint`} className="field-hint">
+              <p id={`${ids}-sides-hint`} className="visually-hidden">
                 {isOneSided(table) ? t.tables.barHint : t.tables.sidesHint}
               </p>
             )}
           </fieldset>
         )}
 
-        <div className="field-row">
-          <NumberField
-            label={t.tables.minSeats}
-            value={table.minSeats}
-            min={1}
-            max={100}
-            disabled={!editable}
-            onChange={(minSeats) => {
-              onChange({ minSeats });
-            }}
-          />
-          <NumberField
-            label={t.tables.maxSeats}
-            value={table.maxSeats}
-            min={1}
-            max={100}
-            disabled={!editable}
-            onChange={(maxSeats) => {
-              onChange({ maxSeats });
-            }}
-          />
-        </div>
+        <fieldset className="field">
+          <legend>{t.tables.guests}</legend>
+          <div className="field-row">
+            <NumberField
+              label={t.tables.minSeats}
+              value={table.minSeats}
+              min={1}
+              max={100}
+              disabled={!editable}
+              onChange={(minSeats) => {
+                onChange({ minSeats });
+              }}
+            />
+            <NumberField
+              label={t.tables.maxSeats}
+              value={table.maxSeats}
+              min={1}
+              max={100}
+              disabled={!editable}
+              onChange={(maxSeats) => {
+                onChange({ maxSeats });
+              }}
+            />
+          </div>
+        </fieldset>
 
         <div className="field-row">
           <MetreField
@@ -212,45 +215,45 @@ export function TableInspector({
           </div>
         </fieldset>
 
-        <NumberField
-          label={t.tables.rotation}
-          value={table.rotation}
-          min={0}
-          max={359}
-          step={15}
-          disabled={!editable}
-          onChange={(rotation) => {
-            onChange({ rotation: normalizeRotation(rotation) });
-          }}
-        />
-
-        <fieldset className="field">
-          <legend>{t.tables.color}</legend>
-          <div className="swatches">
-            {TABLE_COLORS.map((option) => (
-              <label key={option.id} className="swatch">
-                <input
-                  type="radio"
-                  name={`${ids}-color`}
-                  value={option.hex}
-                  checked={color === option.hex}
-                  onChange={() => {
-                    const style = { ...table.style };
-                    if (option.hex === DEFAULT_TABLE_COLOR) delete style.color;
-                    else style.color = option.hex;
-                    onChange({ style });
-                  }}
-                />
-                <span
-                  className="swatch-chip"
-                  style={{ background: option.hex }}
-                  aria-hidden="true"
-                />
-                <span className="swatch-name">{t.tables.colors[option.id]}</span>
-              </label>
-            ))}
+        <div className="field-row">
+          <NumberField
+            label={t.tables.rotation}
+            value={table.rotation}
+            min={0}
+            max={359}
+            step={15}
+            disabled={!editable}
+            onChange={(rotation) => {
+              onChange({ rotation: normalizeRotation(rotation) });
+            }}
+          />
+          <div className="field">
+            <label htmlFor={`${ids}-color`}>{t.tables.color}</label>
+            <div className="color-select">
+              <span className="swatch-chip" style={{ background: color }} aria-hidden="true" />
+              <select
+                id={`${ids}-color`}
+                value={color}
+                onChange={(event) => {
+                  const style = { ...table.style };
+                  if (event.target.value === DEFAULT_TABLE_COLOR) delete style.color;
+                  else style.color = event.target.value;
+                  onChange({ style });
+                }}
+              >
+                {/* A colour set outside the editor stays as it is until another is chosen. */}
+                {!TABLE_COLORS.some((option) => option.hex === color) && (
+                  <option value={color}>{color}</option>
+                )}
+                {TABLE_COLORS.map((option) => (
+                  <option key={option.id} value={option.hex}>
+                    {t.tables.colors[option.id]}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-        </fieldset>
+        </div>
 
         <div className="field field-check">
           <input
@@ -263,7 +266,7 @@ export function TableInspector({
             }}
           />
           <label htmlFor={`${ids}-bookable`}>{t.tables.bookable}</label>
-          <p id={`${ids}-bookable-hint`} className="field-hint">
+          <p id={`${ids}-bookable-hint`} className="visually-hidden">
             {t.tables.bookableHint}
           </p>
         </div>

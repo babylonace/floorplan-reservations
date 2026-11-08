@@ -204,7 +204,7 @@ test("creates, renames and deletes a zone", async ({ page }) => {
 test("lets staff look without changing anything, in English too", async ({ page }) => {
   await signIn(page, STAFF);
   await expect(
-    page.getByText("Puedes ver el plano. Solo la persona propietaria del local puede cambiarlo."),
+    page.getByText("Solo lectura: los cambios los hace la persona propietaria."),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Añadir mesa rectangular" })).toHaveCount(0);
   await tableButton(page, "1").focus();
@@ -212,7 +212,7 @@ test("lets staff look without changing anything, in English too", async ({ page 
   await expect(page.getByLabel("Desde la izquierda")).toBeDisabled();
 
   await page.getByRole("button", { name: "English" }).click();
-  await expect(page.getByText("You can look at the floor plan.")).toBeVisible();
+  await expect(page.getByText("View only: the venue's owner makes the changes.")).toBeVisible();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
 });
@@ -228,7 +228,9 @@ test("builds a bar in sections, with stools on one side, and keeps it after a re
   await addBar.click();
   await expect(tableButton(page, "B2")).toBeFocused();
   await expect(page.getByText("Sin problemas", { exact: true })).toBeVisible();
-  await expect(page.locator(".stools circle")).toHaveCount(4);
+  for (const label of ["B1", "B2"]) {
+    await expect(tableButton(page, label).locator(".chairs circle")).toHaveCount(2);
+  }
   const first = await tableButton(page, "B1").locator(".table-top").boundingBox();
   const second = await tableButton(page, "B2").locator(".table-top").boundingBox();
   // Same line, and B2 starts where B1 ends (give or take the outline).
@@ -244,5 +246,7 @@ test("builds a bar in sections, with stools on one side, and keeps it after a re
   await expect(page.getByRole("status").filter({ hasText: "2 cambios guardados." })).toBeVisible();
   await page.reload();
   await expect(tableButton(page, "B2")).toHaveAccessibleName(/asientos en un solo lado/);
-  await expect(page.locator(".stools circle")).toHaveCount(4);
+  for (const label of ["B1", "B2"]) {
+    await expect(tableButton(page, label).locator(".chairs circle")).toHaveCount(2);
+  }
 });

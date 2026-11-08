@@ -1,5 +1,5 @@
 import { isOneSided, type PlanIssue } from "@floorplan-reservations/engine";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ApiError } from "../api/client";
 import { useApi } from "../api/context";
 import type { FloorPlan, PlanZone, Table, ZoneFields } from "../api/types";
@@ -385,6 +385,11 @@ export function Editor({
               else tableElements.current.delete(id);
             }}
           />
+          {editable && (
+            <div className="plan-tools">
+              <ShortcutsButton />
+            </div>
+          )}
           {draft.tables.length === 0 && (
             <p className="canvas-empty">{editable ? t.plan.empty : t.plan.emptyReadOnly}</p>
           )}
@@ -417,11 +422,9 @@ export function Editor({
             />
           )}
 
-          <section className="panel-section" aria-labelledby="issues-title">
-            <h2 id="issues-title">{t.issues.title}</h2>
-            {issues.length === 0 ? (
-              <p className="panel-hint">{t.issues.none}</p>
-            ) : (
+          {issues.length > 0 && (
+            <section className="panel-section" aria-labelledby="issues-title">
+              <h2 id="issues-title">{t.issues.title}</h2>
               <ul className="issue-list">
                 {issues.map((issue, index) => (
                   <li key={index}>
@@ -439,22 +442,8 @@ export function Editor({
                   </li>
                 ))}
               </ul>
-            )}
-          </section>
-
-          <details className="panel-section shortcuts">
-            <summary>{t.plan.shortcutsTitle}</summary>
-            <dl>
-              {t.plan.shortcuts.map(([keys, action]) => (
-                <div key={keys}>
-                  <dt>
-                    <kbd>{keys}</kbd>
-                  </dt>
-                  <dd>{action}</dd>
-                </div>
-              ))}
-            </dl>
-          </details>
+            </section>
+          )}
         </aside>
       </div>
 
@@ -488,6 +477,72 @@ export function Editor({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * The keyboard shortcuts, behind a "?" button so they take no room until wanted. It opens on
+ * a click or a tap (not on hover, which touch screens do not have) and closes with Escape, the
+ * button again, or a click outside.
+ */
+function ShortcutsButton() {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const id = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    // Both listen before anything else on the page: a table stops its own pointer events, and
+    // Escape must not also let go of the selected table.
+    function outside(event: globalThis.PointerEvent) {
+      if (!wrap.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function escape(event: globalThis.KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setOpen(false);
+      button.current?.focus();
+    }
+    document.addEventListener("pointerdown", outside, true);
+    document.addEventListener("keydown", escape, true);
+    return () => {
+      document.removeEventListener("pointerdown", outside, true);
+      document.removeEventListener("keydown", escape, true);
+    };
+  }, [open]);
+
+  return (
+    <div className="shortcuts" ref={wrap}>
+      <button
+        ref={button}
+        type="button"
+        className="button shortcuts-button"
+        aria-label={t.plan.shortcutsTitle}
+        title={t.plan.shortcutsTitle}
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => {
+          setOpen(!open);
+        }}
+      >
+        <span aria-hidden="true">?</span>
+      </button>
+      <div id={id} className="shortcuts-popover" hidden={!open}>
+        <h2>{t.plan.shortcutsTitle}</h2>
+        <dl>
+          {t.plan.shortcuts.map(([keys, action]) => (
+            <div key={keys}>
+              <dt>
+                <kbd>{keys}</kbd>
+              </dt>
+              <dd>{action}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
     </div>
   );
 }
