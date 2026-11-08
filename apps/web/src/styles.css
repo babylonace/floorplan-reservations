@@ -551,6 +551,32 @@ fieldset {
   grid-area: side;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* The message of a page with no venue sits where the plan would. */
+main.empty-state {
+  grid-area: main;
+}
+
+/* A link to jump past the tools to the plan, shown only when the keyboard reaches it. */
+.skip-link {
+  position: absolute;
+  inset-inline-start: 0.5rem;
+  top: 0.5rem;
+  z-index: 20;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius-small);
+  background: var(--ink);
+  color: #ffffff;
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+.side-slot {
   background: var(--panel);
   border-inline-end: 1px solid var(--line);
 }
@@ -745,6 +771,23 @@ fieldset {
 }
 
 @media (min-width: 901px) {
+  /* Only the panel scrolls: adding, the state and saving stay in sight at the top. */
+  .side-slot {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .side-slot .toolbar {
+    flex: none;
+  }
+
+  .side-slot .side-panel {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
   .notice-area {
     inset-inline-start: calc(var(--panel-width) + 0.75rem);
     width: min(30rem, calc(100vw - var(--panel-width) - 1.5rem));
@@ -1333,7 +1376,7 @@ kbd {
   /* One column: the venue, the plan, then the tools and the panel under it, and the account. */
   .workspace {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto;
+    grid-template-rows: auto 1fr auto auto;
     grid-template-areas:
       "top"
       "main"

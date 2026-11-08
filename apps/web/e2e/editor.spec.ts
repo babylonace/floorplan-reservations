@@ -218,6 +218,12 @@ test("puts the plan on the right, as tall as the window, and the rest in a colum
   for (const button of [add, save, signOut]) expect(button.x + button.width).toBeLessThan(plan.x);
   expect(add.y).toBeLessThan(save.y);
   expect(signOut.y + signOut.height).toBeGreaterThan(viewport.height - 60);
+
+  // In a short window only the panel scrolls: saving stays in sight.
+  await page.setViewportSize({ width: 1280, height: 560 });
+  await tableButton(page, "3").focus();
+  await page.getByRole("button", { name: "Quitar mesa" }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole("button", { name: "Guardar cambios" })).toBeInViewport();
 });
 
 test("lets staff look without changing anything, in English too", async ({ page }) => {

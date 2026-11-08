@@ -29,6 +29,7 @@ export const es: DeepPartial<Messages> = {
     venue: "Local",
     signedInAs: (email: string) => `Has entrado como ${email}`,
     signOut: "Cerrar sesión",
+    skipToPlan: "Ir al plano",
   },
   venues: {
     none: "Tu cuenta todavía no lleva ningún local. Pide a la persona propietaria que te dé acceso.",

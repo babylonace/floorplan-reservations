@@ -43,6 +43,7 @@ export const en = {
     venue: "Venue",
     signedInAs: (email: string) => `Signed in as ${email}`,
     signOut: "Sign out",
+    skipToPlan: "Skip to the plan",
   },
   venues: {
     none: "Your account does not run any venue yet. Ask the venue's owner to give you access.",

@@ -148,6 +148,9 @@ export function Workspace({
       <SideSlotContext.Provider value={sideSlot}>
         <div className="workspace">
           <header className="app-header">
+            <a className="skip-link" href="#main">
+              {t.header.skipToPlan}
+            </a>
             <div className="brand">
               <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false" className="brand-mark">
                 <rect x="3" y="3" width="26" height="26" rx="3" className="bm-floor" />
@@ -189,7 +192,7 @@ export function Workspace({
           {/* The editor's tools and panel land here (see Editor). */}
           <div className="side-slot" ref={setSideSlot} />
 
-          {/* Fixed at the bottom of the window, but next in keyboard order after the header. */}
+          {/* Fixed at the bottom of the window, next in keyboard order after the tools. */}
           <NoticeArea notice={notice} onClose={closeNotice} />
 
           {!venue ? (

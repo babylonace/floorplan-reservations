@@ -272,7 +272,8 @@ export function Editor({
   }
 
   // The tools and the panel go in the left column, beside the plan; on their own (tests of the
-  // editor alone) they stay here.
+  // editor alone) they stay here. The column is on the page before the plan has loaded, so the
+  // editor never starts without it and then moves (which would lose the panel's state).
   const side = (
     <>
       <div className="toolbar" role="toolbar" aria-label={t.plan.toolbar}>
