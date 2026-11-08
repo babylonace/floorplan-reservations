@@ -39,9 +39,9 @@ describe("languages", () => {
     );
     expect(describeError(t, new ApiError(0, "offline"), "table")).toBe(t.errors.network);
     expect(describeError(t, new ApiError(503, "busy"), "table")).toBe(t.errors.busy);
-    // An unknown refusal still says what the server said.
-    expect(describeError(t, new ApiError(400, "body/x must be integer"), "table")).toMatch(
-      /body\/x must be integer/,
-    );
+    // The API's own English sentence never reaches a Spanish screen.
+    const unknown = describeError(t, new ApiError(400, "body/x must be integer"), "table");
+    expect(unknown).toBe(t.errors.rejected);
+    expect(unknown).not.toMatch(/body/);
   });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useApi } from "../api/context";
 import type { Account, FloorPlan, ZoneFields } from "../api/types";
 import { describeError, isSignedOut } from "../errors";
@@ -36,10 +36,17 @@ export function Workspace({
   const zones = plan?.venue.slug === slug ? plan.zones : [];
   const zone = zones.find((candidate) => candidate.id === zoneId) ?? zones[0] ?? null;
 
+  // The venue on screen, for answers that arrive after the person switched to another one.
+  const shownSlug = useRef(slug);
+  useEffect(() => {
+    shownSlug.current = slug;
+  }, [slug]);
+
   const load = useCallback(
     async (target: string): Promise<FloorPlan | null> => {
       try {
         const next = await client.floorPlan(target);
+        if (shownSlug.current !== target) return null;
         setPlan(next);
         setLoadError(null);
         return next;
@@ -182,7 +189,7 @@ export function Workspace({
           <p>{t.venues.none}</p>
         </main>
       ) : (
-        <main className="workspace-main" id="main">
+        <main className="workspace-main" id="main" tabIndex={-1}>
           <nav className="zone-bar" aria-label={t.zones.listLabel}>
             <ul>
               {zones.map((candidate) => (

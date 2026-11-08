@@ -112,7 +112,8 @@ export function PlanCanvas(props: PlanCanvasProps) {
   function startGesture(event: PointerEvent, table: Table, kind: Gesture["kind"]) {
     event.stopPropagation();
     onSelect(table.id);
-    if (!editable || event.button !== 0) return;
+    // One gesture at a time: a second finger does not take over the table being dragged.
+    if (!editable || event.button !== 0 || gesture.current) return;
     const point = toPlan(event);
     if (!point) return;
     svgRef.current?.setPointerCapture(event.pointerId);
@@ -228,6 +229,9 @@ export function PlanCanvas(props: PlanCanvasProps) {
       <svg
         ref={svgRef}
         className={editable ? "plan-svg is-editable" : "plan-svg"}
+        // Keyboard focus lands here when the focused table is removed.
+        tabIndex={-1}
+        data-plan-canvas=""
         viewBox={`${String(-pad)} ${String(-pad)} ${String(zone.width + 2 * pad)} ${String(zone.height + 2 * pad)}`}
         preserveAspectRatio="xMidYMid meet"
         role="group"
@@ -235,7 +239,9 @@ export function PlanCanvas(props: PlanCanvasProps) {
         aria-describedby={helpId}
         onPointerMove={onPointerMove}
         onPointerUp={endGesture}
-        onPointerCancel={endGesture}
+        onPointerCancel={(event) => {
+          if (gesture.current?.pointerId === event.pointerId) cancelGesture();
+        }}
         onPointerDown={() => {
           onSelect(null);
         }}

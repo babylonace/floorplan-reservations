@@ -18,6 +18,19 @@ export interface SaveResult {
   saved: number;
 }
 
+/**
+ * Refusals that can go away once other changes in the same save are in: a move into a place
+ * another table is leaving (422), a name another table is giving up (duplicate label), or a
+ * table that another change touched a moment before.
+ */
+function worthRetrying(error: ApiError): boolean {
+  return (
+    error.status === 422 ||
+    error.code === "duplicate_label" ||
+    error.code === "changed_while_saving"
+  );
+}
+
 /** Errors after which sending the rest is pointless. */
 function stopsEverything(error: ApiError): boolean {
   return error.status === 0 || error.status === 401 || error.status === 403 || error.status >= 500;
@@ -30,8 +43,8 @@ function asApiError(error: unknown): ApiError {
 /**
  * Sends `changes` one by one. The API checks each change against what is stored at that moment,
  * so a table moved into the place of another that is also moving can be refused only because
- * the other one has not moved yet. Changes refused as making the plan invalid (422) are
- * therefore tried again after the others, for as long as each round saves something.
+ * the other one has not moved yet. Such refusals (see `worthRetrying`) are tried again after
+ * the others, for as long as each round saves something.
  */
 export async function saveChanges(
   api: Pick<Api, "createTable" | "updateTable" | "deleteTable">,
@@ -64,7 +77,7 @@ export async function saveChanges(
           result.saved += savedThisRound;
           return result;
         }
-        if (error.status === 422) refusedAsInvalid.push({ change, error });
+        if (worthRetrying(error)) refusedAsInvalid.push({ change, error });
         else result.failures.push({ change, error });
       }
     }

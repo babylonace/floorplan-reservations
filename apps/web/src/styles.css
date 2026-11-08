@@ -573,6 +573,11 @@ fieldset {
   white-space: nowrap;
 }
 
+.workspace-main:focus,
+.plan-svg:focus {
+  outline: none;
+}
+
 .workspace-main {
   display: flex;
   flex-direction: column;
@@ -1114,4 +1119,8 @@ kbd {
   .focus-ring {
     stroke: Highlight;
   }
+}
+
+.modal .login-intro {
+  margin-bottom: 1.2rem;
 }

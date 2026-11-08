@@ -204,6 +204,28 @@ describe("saving", () => {
     expect(calls.updateTable.mock.calls.map((call) => call[1])).toEqual(["a", "b", "a"]);
   });
 
+  it("tries a name again once the table that had it has been renamed", async () => {
+    const calls = api();
+    const labels = new Map([
+      ["a", "1"],
+      ["b", "2"],
+    ]);
+    calls.updateTable.mockImplementation((_slug, id, fields) => {
+      const wanted = fields.label ?? "";
+      if ([...labels].some(([other, label]) => other !== id && label === wanted)) {
+        return Promise.reject(new ApiError(409, "taken", { code: "duplicate_label" }));
+      }
+      labels.set(id, wanted);
+      return Promise.resolve(table({ id, label: wanted }));
+    });
+    const result = await saveChanges(calls, "v", "zone-1", [
+      { kind: "update", id: "a", label: "2", fields: { label: "2" } },
+      { kind: "update", id: "b", label: "3", fields: { label: "3" } },
+    ]);
+    expect(result.failures).toEqual([]);
+    expect([...labels.values()]).toEqual(["2", "3"]);
+  });
+
   it("gives up on changes that stay invalid, and reports other refusals", async () => {
     const calls = api();
     calls.updateTable.mockRejectedValue(new ApiError(422, "invalid"));

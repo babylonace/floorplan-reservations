@@ -40,7 +40,8 @@ export function describeError(t: Messages, thrown: unknown, context: ErrorContex
     case "plan_invalid":
       return context === "zone" ? t.errors.zoneInvalid : t.errors.planInvalid;
     default:
-      return t.errors.rejected(error.message);
+      // The API's own sentence is English and technical, so it is not shown.
+      return t.errors.rejected;
   }
 }
 

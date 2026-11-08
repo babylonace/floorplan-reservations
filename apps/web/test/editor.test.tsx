@@ -246,18 +246,51 @@ describe("the plan editor", () => {
     expect(screen.getByText("Todo guardado")).toBeInTheDocument();
   });
 
-  it("sends the person back to sign in when the session has ended", async () => {
+  it("asks to sign in again when the session ends, and keeps what was not saved", async () => {
     const user = userEvent.setup();
-    const updateTable = vi.fn<Api["updateTable"]>(() =>
-      Promise.reject(new ApiError(401, "Please sign in first.")),
-    );
-    renderApp(signedInApi({ updateTable }));
+    const updateTable = vi
+      .fn<Api["updateTable"]>()
+      .mockRejectedValueOnce(new ApiError(401, "Please sign in first."))
+      .mockImplementation((_slug, id, fields) => Promise.resolve({ ...table({ id }), ...fields }));
+    const login = vi.fn<Api["login"]>(() => Promise.resolve(OWNER));
+    renderApp(signedInApi({ updateTable, login }));
     await focusTable("1");
     await user.keyboard("{ArrowDown}");
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Vuelve a entrar" });
+    expect(dialog).toHaveTextContent("lo que no habías guardado sigue en el plano");
+    expect(within(dialog).getByLabelText("Correo electrónico")).toHaveFocus();
+    await user.type(within(dialog).getByLabelText("Correo electrónico"), "owner@example.com");
+    await user.type(within(dialog).getByLabelText("Contraseña"), "right-password");
+    await user.click(within(dialog).getByRole("button", { name: "Entrar" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("1 cambio sin guardar")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    expect(await screen.findByText("Cambio guardado.")).toBeInTheDocument();
+    expect(updateTable).toHaveBeenLastCalledWith("test-venue", "t1", { y: 105 });
+  });
+
+  it("will not save a table without a name", async () => {
+    const user = userEvent.setup();
+    renderApp(signedInApi());
+    await focusTable("1");
+    await user.clear(screen.getByLabelText("Nombre o número"));
     expect(
-      await screen.findByText("Tu sesión ha terminado. Vuelve a entrar para seguir."),
+      screen.getByText("Todas las mesas necesitan un nombre o un número para guardar."),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeDisabled();
+  });
+
+  it("moves keyboard focus to the next table after removing one", async () => {
+    const user = userEvent.setup();
+    renderApp(signedInApi());
+    await focusTable("1");
+    await user.keyboard("{Delete}");
+    expect(await findTable("2")).toHaveFocus();
+    await user.keyboard("{Delete}");
+    expect(document.querySelector("[data-plan-canvas]")).toHaveFocus();
   });
 
   it("creates a zone", async () => {

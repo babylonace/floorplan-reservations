@@ -1,4 +1,4 @@
-import { useId, useState, type SubmitEvent } from "react";
+import { useId, useState, type ReactNode, type SubmitEvent } from "react";
 import { ApiError } from "../api/client";
 import { useApi } from "../api/context";
 import type { Account } from "../api/types";
@@ -9,6 +9,45 @@ export function LoginScreen({
   notice,
   onSignedIn,
 }: {
+  notice?: string | undefined;
+  onSignedIn: (account: Account) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="login">
+      <div className="login-art" aria-hidden="true">
+        <LoginDrawing />
+      </div>
+      <main className="login-panel">
+        <div className="login-top">
+          <LanguageSwitch />
+        </div>
+        <SignInForm
+          className="login-form"
+          title={<h1>{t.login.title}</h1>}
+          intro={t.login.intro}
+          notice={notice}
+          onSignedIn={onSignedIn}
+        />
+      </main>
+    </div>
+  );
+}
+
+/**
+ * E-mail and password. Used on the sign-in page, and in a dialog over the editor when a session
+ * ends, so unsaved changes survive signing in again.
+ */
+export function SignInForm({
+  className,
+  title,
+  intro,
+  notice,
+  onSignedIn,
+}: {
+  className?: string;
+  title?: ReactNode;
+  intro?: string;
   notice?: string | undefined;
   onSignedIn: (account: Account) => void;
 }) {
@@ -46,66 +85,57 @@ export function LoginScreen({
   }
 
   return (
-    <div className="login">
-      <div className="login-art" aria-hidden="true">
-        <LoginDrawing />
+    <form className={className} onSubmit={(event) => void submit(event)} noValidate>
+      {title}
+      {intro && <p className="login-intro">{intro}</p>}
+      {notice && !error && (
+        <p className="inline-notice" role="status">
+          {notice}
+        </p>
+      )}
+      {error && (
+        <p className="inline-error" role="alert" id={`${ids}-error`}>
+          {error}
+        </p>
+      )}
+      <div className="field">
+        <label htmlFor={`${ids}-email`}>{t.login.email}</label>
+        <input
+          id={`${ids}-email`}
+          data-autofocus
+          type="email"
+          autoComplete="username"
+          required
+          value={email}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${ids}-error` : undefined}
+          onChange={(event) => {
+            setEmail(event.target.value);
+          }}
+        />
       </div>
-      <main className="login-panel">
-        <div className="login-top">
-          <LanguageSwitch />
-        </div>
-        <form className="login-form" onSubmit={(event) => void submit(event)} noValidate>
-          <h1>{t.login.title}</h1>
-          <p className="login-intro">{t.login.intro}</p>
-          {notice && !error && (
-            <p className="inline-notice" role="status">
-              {notice}
-            </p>
-          )}
-          {error && (
-            <p className="inline-error" role="alert" id={`${ids}-error`}>
-              {error}
-            </p>
-          )}
-          <div className="field">
-            <label htmlFor={`${ids}-email`}>{t.login.email}</label>
-            <input
-              id={`${ids}-email`}
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              aria-invalid={error ? true : undefined}
-              aria-describedby={error ? `${ids}-error` : undefined}
-              onChange={(event) => {
-                setEmail(event.target.value);
-              }}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor={`${ids}-password`}>{t.login.password}</label>
-            <input
-              id={`${ids}-password`}
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              aria-invalid={error ? true : undefined}
-              onChange={(event) => {
-                setPassword(event.target.value);
-              }}
-            />
-          </div>
-          <button
-            type="submit"
-            className="button button-primary button-wide"
-            disabled={busy || !email.trim() || !password}
-          >
-            {busy ? t.login.submitting : t.login.submit}
-          </button>
-        </form>
-      </main>
-    </div>
+      <div className="field">
+        <label htmlFor={`${ids}-password`}>{t.login.password}</label>
+        <input
+          id={`${ids}-password`}
+          type="password"
+          autoComplete="current-password"
+          required
+          value={password}
+          aria-invalid={error ? true : undefined}
+          onChange={(event) => {
+            setPassword(event.target.value);
+          }}
+        />
+      </div>
+      <button
+        type="submit"
+        className="button button-primary button-wide"
+        disabled={busy || !email.trim() || !password}
+      >
+        {busy ? t.login.submitting : t.login.submit}
+      </button>
+    </form>
   );
 }
 

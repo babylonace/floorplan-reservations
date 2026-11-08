@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import fastifyStatic from "@fastify/static";
 import type { FastifyPluginAsync } from "fastify";
 
@@ -49,7 +49,7 @@ export const webRoutes: FastifyPluginAsync<{ dir: string }> = async (app, { dir 
       res.header("x-content-type-options", "nosniff");
       res.header("referrer-policy", "no-referrer");
       // Vite puts a hash of the content in every file name under assets/, so those never change.
-      const hashed = /[\\/]assets[\\/]/.test(path);
+      const hashed = /^assets[\\/]/.test(relative(root, path));
       res.header(
         "cache-control",
         hashed ? "public, max-age=31536000, immutable" : "no-cache, must-revalidate",

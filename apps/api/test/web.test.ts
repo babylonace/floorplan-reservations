@@ -9,11 +9,12 @@ import { CONTENT_SECURITY_POLICY } from "../src/routes/web.js";
 import { TEST_APP_OPTIONS, testDatabaseUrl } from "./helpers.js";
 
 const pool = createPool(testDatabaseUrl());
-const dir = mkdtempSync(join(tmpdir(), "floorplan-web-"));
+// A parent folder called "assets" must not make index.html look like a hashed asset.
+const dir = join(mkdtempSync(join(tmpdir(), "floorplan-web-")), "assets", "dist");
 let app: FastifyInstance;
 
 beforeAll(async () => {
-  mkdirSync(join(dir, "assets"));
+  mkdirSync(join(dir, "assets"), { recursive: true });
   writeFileSync(join(dir, "index.html"), "<!doctype html><title>Plan</title>");
   writeFileSync(join(dir, "assets", "index-abc123.js"), "console.log(1);");
   app = await buildApp({ pool, ...TEST_APP_OPTIONS, webDir: dir });
@@ -22,7 +23,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await app.close();
   await pool.end();
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(join(dir, "..", ".."), { recursive: true, force: true });
 });
 
 describe("the built web app", () => {

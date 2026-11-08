@@ -3,13 +3,15 @@ import { useApi } from "../api/context";
 import type { Account } from "../api/types";
 import { isSignedOut } from "../errors";
 import { useI18n } from "../i18n/i18n";
-import { LoginScreen } from "./LoginScreen";
+import { LoginScreen, SignInForm } from "./LoginScreen";
+import { Modal } from "./ui";
 import { Workspace } from "./Workspace";
 
 type Session =
   | { state: "checking" }
-  | { state: "signedOut"; reason?: "expired" | "unreachable" }
-  | { state: "signedIn"; account: Account };
+  | { state: "signedOut"; reason?: "unreachable" }
+  /** `expired`: the session ended while the editor was open; it stays open behind a sign-in. */
+  | { state: "signedIn"; account: Account; expired: boolean };
 
 export function App() {
   const { t } = useI18n();
@@ -20,7 +22,7 @@ export function App() {
     let current = true;
     client.me().then(
       (account) => {
-        if (current) setSession({ state: "signedIn", account });
+        if (current) setSession({ state: "signedIn", account, expired: false });
       },
       (error: unknown) => {
         if (current) {
@@ -38,7 +40,9 @@ export function App() {
   }, [client]);
 
   const onSessionLost = useCallback(() => {
-    setSession({ state: "signedOut", reason: "expired" });
+    setSession((current) =>
+      current.state === "signedIn" ? { ...current, expired: true } : current,
+    );
   }, []);
 
   if (session.state === "checking") {
@@ -51,26 +55,42 @@ export function App() {
   if (session.state === "signedOut") {
     return (
       <LoginScreen
-        notice={
-          session.reason === "expired"
-            ? t.login.sessionEnded
-            : session.reason === "unreachable"
-              ? t.errors.network
-              : undefined
-        }
+        notice={session.reason === "unreachable" ? t.errors.network : undefined}
         onSignedIn={(account) => {
-          setSession({ state: "signedIn", account });
+          setSession({ state: "signedIn", account, expired: false });
         }}
       />
     );
   }
+  const signedIn = session;
   return (
-    <Workspace
-      account={session.account}
-      onSignedOut={() => {
-        setSession({ state: "signedOut" });
-      }}
-      onSessionLost={onSessionLost}
-    />
+    <>
+      <div className="app-root" inert={signedIn.expired}>
+        <Workspace
+          // Another account starts afresh; the same one keeps whatever was not saved.
+          key={signedIn.account.email}
+          account={signedIn.account}
+          onSignedOut={() => {
+            setSession({ state: "signedOut" });
+          }}
+          onSessionLost={onSessionLost}
+        />
+      </div>
+      {signedIn.expired && (
+        <Modal
+          title={t.login.sessionEndedTitle}
+          onClose={() => {
+            setSession({ state: "signedOut" });
+          }}
+        >
+          <SignInForm
+            intro={t.login.sessionEnded}
+            onSignedIn={(account) => {
+              setSession({ state: "signedIn", account, expired: false });
+            }}
+          />
+        </Modal>
+      )}
+    </>
   );
 }

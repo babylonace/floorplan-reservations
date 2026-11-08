@@ -22,7 +22,9 @@ export const es: DeepPartial<Messages> = {
     submitting: "Entrando…",
     wrong: "El correo y la contraseña no coinciden.",
     locked: "Demasiados intentos con este correo. Espera 15 minutos y vuelve a probar.",
-    sessionEnded: "Tu sesión ha terminado. Vuelve a entrar para seguir.",
+    sessionEndedTitle: "Vuelve a entrar",
+    sessionEnded:
+      "Tu sesión ha terminado. Vuelve a entrar para seguir: lo que no habías guardado sigue en el plano.",
   },
   header: {
     venue: "Local",
@@ -142,6 +144,7 @@ export const es: DeepPartial<Messages> = {
   save: {
     unsaved: (n: number) => plural(n, "1 cambio sin guardar", `${String(n)} cambios sin guardar`),
     allSaved: "Todo guardado",
+    needsLabels: "Todas las mesas necesitan un nombre o un número para guardar.",
     save: "Guardar cambios",
     saving: "Guardando…",
     discard: "Descartar cambios",
@@ -191,7 +194,7 @@ export const es: DeepPartial<Messages> = {
     changed: "cambió mientras se guardaba. Vuelve a probar.",
     planInvalid: "el plano quedaría con problemas:",
     zoneInvalid: "La zona no puede ser tan pequeña, porque:",
-    rejected: (detail: string) => `el servidor no lo aceptó (${detail}).`,
+    rejected: "el servidor no aceptó uno de los datos. Revisa los campos y vuelve a probar.",
     dismiss: "Cerrar aviso",
   },
   dialog: {

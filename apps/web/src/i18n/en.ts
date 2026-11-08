@@ -34,7 +34,9 @@ export const en = {
     submitting: "Signing in…",
     wrong: "That e-mail address and password do not match.",
     locked: "Too many attempts for this address. Wait 15 minutes and try again.",
-    sessionEnded: "Your session has ended. Sign in again to carry on.",
+    sessionEndedTitle: "Sign in again",
+    sessionEnded:
+      "Your session has ended. Sign in again to carry on: anything you had not saved is still on the plan.",
   },
   header: {
     venue: "Venue",
@@ -154,6 +156,7 @@ export const en = {
   save: {
     unsaved: (n: number) => plural(n, "1 unsaved change", `${String(n)} unsaved changes`),
     allSaved: "All changes saved",
+    needsLabels: "Every table needs a name or number before saving.",
     save: "Save changes",
     saving: "Saving…",
     discard: "Discard changes",
@@ -204,7 +207,7 @@ export const en = {
     changed: "it changed while saving. Try again.",
     planInvalid: "the plan would have problems:",
     zoneInvalid: "The zone cannot be that small, because:",
-    rejected: (detail: string) => `the server did not accept it (${detail}).`,
+    rejected: "the server did not accept one of the values. Check the fields and try again.",
     dismiss: "Close message",
   },
   dialog: {

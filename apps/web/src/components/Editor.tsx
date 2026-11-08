@@ -36,6 +36,9 @@ export interface EditorProps {
   onZoneDeleted: (name: string) => void;
 }
 
+/** Stands for the plan itself in `focusNext`. */
+const CANVAS = "canvas";
+
 const NEW_TABLE = {
   rect: { width: 120, height: 80, minSeats: 2, maxSeats: 4 },
   round: { width: 90, height: 90, minSeats: 2, maxSeats: 4 },
@@ -66,6 +69,7 @@ export function Editor({
   const changes = useMemo(() => pendingChanges(draft), [draft]);
   const issues = useMemo(() => draftIssues(draft, zone), [draft, zone]);
   const canEdit = editable && !busy;
+  const labelsMissing = draft.tables.some((table) => !table.label.trim());
   const selected = draft.tables.find((table) => table.id === selectedId) ?? null;
 
   useEffect(() => {
@@ -77,7 +81,8 @@ export function Editor({
     const id = focusNext.current;
     if (!id) return;
     focusNext.current = null;
-    tableElements.current.get(id)?.focus();
+    if (id === CANVAS) document.querySelector<SVGSVGElement>("[data-plan-canvas]")?.focus();
+    else tableElements.current.get(id)?.focus();
   });
 
   const labelOf = (id: string) =>
@@ -125,8 +130,12 @@ export function Editor({
 
   function remove(id: string) {
     const label = labelOf(id);
+    // Keyboard focus moves on to the next table (or the plan), not to the top of the page.
+    const index = draft.tables.findIndex((table) => table.id === id);
+    const next = draft.tables[index + 1] ?? draft.tables[index - 1];
     setDraft((current) => removeTable(current, id));
-    setSelectedId(null);
+    setSelectedId(next?.id ?? null);
+    focusNext.current = next?.id ?? CANVAS;
     setAnnouncement(t.announce.removed(label));
   }
 
@@ -267,7 +276,11 @@ export function Editor({
           {editable && (
             <>
               <span className="save-state" aria-live="polite">
-                {changes.length > 0 ? t.save.unsaved(changes.length) : t.save.allSaved}
+                {labelsMissing
+                  ? t.save.needsLabels
+                  : changes.length > 0
+                    ? t.save.unsaved(changes.length)
+                    : t.save.allSaved}
               </span>
               <button
                 type="button"
@@ -282,7 +295,7 @@ export function Editor({
               <button
                 type="button"
                 className="button button-primary"
-                disabled={!canEdit || changes.length === 0}
+                disabled={!canEdit || changes.length === 0 || labelsMissing}
                 onClick={() => void save()}
               >
                 {busy ? t.save.saving : t.save.save}

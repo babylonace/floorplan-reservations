@@ -62,7 +62,8 @@ export function Modal({
       box.current?.querySelector<HTMLElement>(FOCUSABLE);
     first?.focus();
     return () => {
-      opener?.focus();
+      if (opener?.isConnected && !opener.matches(":disabled")) opener.focus();
+      else document.querySelector<HTMLElement>("main")?.focus();
     };
   }, []);
 
