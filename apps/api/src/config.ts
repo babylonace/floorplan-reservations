@@ -9,6 +9,8 @@ export interface Config {
   trustProxy: boolean | string;
   bookingRateLimit: { max: number; windowMs: number };
   loginRateLimit: { max: number; windowMs: number };
+  /** The built staff web app to serve at /, when WEB_DIR is set. */
+  webDir: string | undefined;
 }
 
 const ROOT_ENV_FILE = fileURLToPath(new URL("../../../.env", import.meta.url));
@@ -48,6 +50,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       max: positiveWhole(env, "LOGIN_RATE_LIMIT_MAX", 30),
       windowMs: positiveWhole(env, "LOGIN_RATE_LIMIT_WINDOW_MINUTES", 15) * 60_000,
     },
+    webDir: env.WEB_DIR?.trim() ? env.WEB_DIR.trim() : undefined,
   };
 }
 

@@ -38,6 +38,8 @@ interface ApiZone {
 
 interface Refusal {
   error: string;
+  code?: string;
+  count?: number;
   issues?: { code: string; tableId: string; otherTableId?: string }[];
 }
 
@@ -141,6 +143,7 @@ describe("zones", () => {
       height: 10,
     });
     expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json<Refusal>().code).toBe("duplicate_name");
 
     const blank = await call("POST", "/venues/zone-bad/zones", {
       name: "   ",
@@ -190,6 +193,7 @@ describe("zones", () => {
     const response = await call("PATCH", `/venues/zone-shrink/zones/${zoneId}`, { width: 1000 });
 
     expect(response.statusCode).toBe(422);
+    expect(response.json<Refusal>().code).toBe("plan_invalid");
     expect(response.json<Refusal>().issues).toEqual([
       { code: "outside_zone", tableId: tableIds[0] },
     ]);
@@ -202,6 +206,7 @@ describe("zones", () => {
     await venueWith("zone-intruder");
     const patch = await call("PATCH", `/venues/zone-intruder/zones/${zoneId}`, { name: "Mine" });
     expect(patch.statusCode).toBe(404);
+    expect(patch.json<Refusal>().code).toBe("not_found");
     const remove = await call("DELETE", `/venues/zone-intruder/zones/${zoneId}`);
     expect(remove.statusCode).toBe(404);
     const addTable = await call("POST", `/venues/zone-intruder/zones/${zoneId}/tables`, TABLE);
@@ -224,6 +229,7 @@ describe("zones", () => {
 
     const response = await call("DELETE", `/venues/zone-booked/zones/${zoneId}`);
     expect(response.statusCode).toBe(409);
+    expect(response.json<Refusal>()).toMatchObject({ code: "upcoming_reservations", count: 1 });
     expect((await floorPlan("zone-booked")).zones).toHaveLength(1);
   });
 
@@ -321,7 +327,9 @@ describe("tables", () => {
     const { zoneId } = await venueWith("table-bad", [{ label: "A", x: 100 }]);
     const url = `/venues/table-bad/zones/${zoneId}/tables`;
 
-    expect((await call("POST", url, { ...TABLE, label: "A" })).statusCode).toBe(409);
+    const duplicate = await call("POST", url, { ...TABLE, label: "A" });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json<Refusal>().code).toBe("duplicate_label");
     expect((await call("POST", url, { ...TABLE, label: " " })).statusCode).toBe(400);
     expect(
       (await call("POST", url, { ...TABLE, style: { note: "x".repeat(3000) } })).statusCode,
@@ -494,6 +502,7 @@ describe("plan edits never break upcoming reservations", () => {
     const response = await call("DELETE", `/venues/keep-delete/tables/${tableIds[0]}`);
     expect(response.statusCode).toBe(409);
     expect(response.json<Refusal>().error).toMatch(/not bookable/);
+    expect(response.json<Refusal>()).toMatchObject({ code: "upcoming_reservations", count: 1 });
   });
 
   it("lets staff mark a booked table as not bookable: the booking stays, new ones go elsewhere", async () => {
@@ -530,6 +539,7 @@ describe("plan edits never break upcoming reservations", () => {
       minSeats: 1,
     });
     expect(fewer.statusCode).toBe(409);
+    expect(fewer.json<Refusal>()).toMatchObject({ code: "reservations_without_room", count: 1 });
 
     // Moving it, or raising the minimum, leaves the party with room, so it is allowed.
     const moved = await call("PATCH", `/venues/keep-seats/tables/${tableIds[0]}`, {
@@ -689,6 +699,7 @@ describe("limits", () => {
       height: 50,
     });
     expect(extra.statusCode).toBe(409);
+    expect(extra.json<Refusal>().code).toBe("limit_reached");
 
     await pool.query(
       `insert into zones (venue_id, name, width, height)

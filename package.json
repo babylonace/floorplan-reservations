@@ -13,26 +13,33 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "tsc -b",
-    "typecheck": "tsc -b && tsc -p packages/engine/test && tsc -p apps/api/test",
+    "build": "tsc -b && npm run build -w @floorplan-reservations/web",
+    "typecheck": "tsc -b && tsc -p packages/engine/test && tsc -p apps/api/test && tsc -p apps/web && tsc -p apps/web/e2e",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test",
     "dev": "tsc -b && npm run dev -w @floorplan-reservations/api",
+    "dev:web": "npm run dev -w @floorplan-reservations/web",
+    "e2e": "npm run build && npm run e2e -w @floorplan-reservations/web",
     "db:migrate": "tsc -b && node apps/api/dist/migrate-cli.js",
     "db:seed": "tsc -b && node apps/api/dist/seed-cli.js",
     "staff": "tsc -b && node apps/api/dist/staff-cli.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.64.1",
     "@types/node": "^24.19.2",
     "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.1",
     "vitest": "^5.1.0"
+  },
+  "overrides": {
+    "playwright-core": "$@playwright/test"
   }
 }

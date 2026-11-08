@@ -4,7 +4,9 @@ Reservas de mesa para restaurantes: el local dibuja su propio plano y el motor d
 
 [Read in English](README.md)
 
-> **Estado: muy al principio.** La API ya acepta reservas, la base de datos rechaza las reservas dobles y el local puede editar su plano a través de la API. Las reservas públicas respetan el horario, la antelación máxima y un límite por dirección. El personal entra con contraseña y solo los propietarios de cada local pueden cambiarlo. Todavía no hay pantalla para dibujar, página de reserva ni panel del local. Mira la [hoja de ruta](#hoja-de-ruta).
+> **Estado: en sus inicios.** La API acepta reservas, la base de datos rechaza las reservas dobles y los propietarios dibujan su plano en un editor en el navegador. Las reservas públicas respetan el horario, la antelación máxima y los límites por dirección. El personal entra con contraseña y solo los propietarios de un local pueden cambiar su plano. Todavía no hay página de reservas ni pantalla del personal. Mira la [hoja de ruta](#hoja-de-ruta).
+
+![El editor del plano: un comedor dibujado a escala sobre un tapete de corte verde, con la mesa 3 elegida y sus datos en el panel lateral](docs/images/editor.png)
 
 ## Por qué
 
@@ -35,6 +37,7 @@ Fuera de alcance: comandas, pantallas de cocina, TPV.
   - Inicio de sesión del personal: `POST /auth/login`, `POST /auth/logout` y `GET /auth/me`. Mira [cuentas del personal e inicio de sesión](#cuentas-del-personal-e-inicio-de-sesión).
   - `GET /health` comprueba que la API llega a la base de datos.
   - `GET /openapi.json` describe la API (OpenAPI 3.1).
+- `apps/web`: el [editor del plano](#el-editor-del-plano) para el personal, en React y TypeScript, construido con Vite. La API lo sirve en `/`.
 - `npm run staff`: la línea de comandos que crea el primer propietario y gestiona las cuentas del personal.
 - `db/migrations`: el esquema, en archivos SQL normales. Un pequeño programa los aplica en orden, cada uno en su transacción y con un bloqueo para que dos copias de la app no migren a la vez.
 - `db/seed/sample.sql`: un local inventado para probar.
@@ -49,11 +52,11 @@ Necesitas Docker con Compose.
 docker compose up --build
 ```
 
-Después carga el local de ejemplo y pide su plano:
+Después carga el local de ejemplo, crea su propietario (te pide una contraseña) y abre <http://127.0.0.1:3000> para entrar en el editor:
 
 ```bash
 docker compose exec api node apps/api/dist/seed-cli.js
-curl http://127.0.0.1:3000/venues/sample-bistro/floor-plan
+docker compose exec api node apps/api/dist/staff-cli.js add --venue sample-bistro --email tu@example.com --role owner
 ```
 
 ### Con Node y tu propio PostgreSQL
@@ -65,8 +68,12 @@ cp .env.example .env    # y cambia las dos URL de la base de datos
 npm install
 npm run db:migrate
 npm run db:seed
-npm run dev
+npm run staff -- add --venue sample-bistro --email tu@example.com --role owner
+npm run dev       # la API en http://127.0.0.1:3000
+npm run dev:web   # el editor en http://127.0.0.1:5173, que se recarga al cambiarlo
 ```
+
+`npm run build` construye la API y el editor; a partir de ahí, la propia API sirve el editor en <http://127.0.0.1:3000>.
 
 ## Tests y comprobaciones
 
@@ -76,7 +83,16 @@ npm run check
 
 Pasa Prettier, ESLint, el compilador de TypeScript y los tests. Los tests de la API necesitan un PostgreSQL de verdad: pon `TEST_DATABASE_URL` en `.env`. **Los tests borran esa base de datos**, así que se niegan a arrancar si su nombre no acaba en `_test`. Con Docker Compose, la base `floorplan_test` se crea la primera vez que se crea el volumen de datos. Si tu volumen es anterior, créala con `docker compose exec db createdb -U floorplan -O floorplan floorplan_test`.
 
-La CI pasa las mismas comprobaciones en cada pull request contra PostgreSQL 18, y además construye la imagen de Docker, la arranca con Compose y llama a la API.
+Los tests del editor (Vitest con Testing Library, en un navegador simulado) van con los demás. Las pruebas en navegador van aparte, porque necesitan un navegador de verdad:
+
+```bash
+npx -w @floorplan-reservations/web playwright install chromium   # una vez
+npm run e2e
+```
+
+Construyen todo, borran la base de datos de `E2E_DATABASE_URL` (su nombre tiene que acabar en `_e2e`), cargan el local de ejemplo con cuentas inventadas, arrancan la API de verdad y manejan Chromium a través de ella: entrar, mover mesas con el teclado y con el ratón, girarlas y cambiarles el tamaño, los rechazos de la API, las zonas, la vista de solo lectura del personal, una revisión de accesibilidad con [axe](https://github.com/dequelabs/axe-core) y una comprobación de que la política de seguridad de contenido no bloquea nada.
+
+La CI pasa las mismas comprobaciones en cada pull request contra PostgreSQL 18. Las pruebas en navegador tienen su propio trabajo. Otro trabajo construye la imagen de Docker, la arranca con Compose y llama a la API y al editor.
 
 ## Cómo se guarda el plano
 
@@ -114,8 +130,31 @@ Los propietarios de un local pueden crear, cambiar y quitar sus zonas y mesas co
 - Ningún cambio deja sin sitio a una reserva futura. Quitarle asientos que necesita, separar las mesas que tiene juntas, hacer redonda una de ellas o llevar una a otra zona se rechaza con `409`. Una mesa reservada sola sí se puede mover, incluso a otra zona: el grupo la conserva.
 - Marcar una mesa como no reservable nunca rompe una reserva: las ya hechas la conservan y las nuevas van a otra mesa.
 - Un local puede tener hasta 50 zonas y una zona hasta 200 mesas.
+- Los rechazos llevan un `code` junto a la frase en inglés de `error` (`plan_invalid`, `upcoming_reservations`, `reservations_without_room`, `duplicate_label`, `duplicate_name`, `limit_reached`, `changed_while_saving`, `not_found`) y, cuando hay reservas en medio, un `count`. El editor los traduce a su idioma.
 - Una mesa con una reserva futura no se puede quitar. Una mesa que solo tuvo reservas pasadas se **retira** en vez de borrarse: sale del plano y del motor, y las reservas antiguas siguen apuntando a ella. Su nombre queda libre. Quitar una zona funciona igual con todas sus mesas.
 - Los cambios en la misma zona esperan su turno (bloquean la zona y luego las mesas). Una reserva que tuvo que esperar a que se editaran sus mesas vuelve a leer el plano antes de guardarse, así que no puede caer en una mesa que acaba de perder asientos o de dejar de ser reservable.
+
+## El editor del plano
+
+![La misma sala en inglés, con dos mesas una encima de otra: las dos salen rayadas en rojo y el panel lateral dice "Tables 3 and 4 overlap."](docs/images/editor-problem-en.png)
+
+Una pantalla para que los propietarios del local dibujen sus salas. El personal también puede abrirla, solo para mirar.
+
+- **Dibujado a escala** en SVG, una unidad por centímetro, con las medidas de la sala en sus bordes y una barra de escala. Las mesas enseñan sus sillas alrededor.
+- **Con el ratón:** arrastra una mesa para moverla (se ajusta a 5 cm; con Alt se coloca libre), el tirador redondo la gira de 15 en 15 grados y el cuadrado le cambia el tamaño desde el centro.
+- **Con el teclado:** Tab pasa de una mesa a otra, las flechas mueven la elegida 5 cm (50 cm con Mayús), R la gira, Supr la quita y Esc la suelta. Cada mesa tiene un nombre completo para los lectores de pantalla ("Mesa 3, redonda, de 2 a 4 personas, a 500 cm de la izquierda…") y los movimientos se anuncian.
+- **El panel lateral** cambia todo lo que guarda la API: nombre, forma, personas, tamaño, posición, giro, color y si se puede reservar por internet. Sin ninguna mesa elegida, cambia la zona. Las zonas también se crean, se renombran, cambian de tamaño y se borran desde ahí.
+- **Los problemas se ven mientras trabajas.** El editor pasa el mismo `validateZone` que la API en cada cambio: las mesas que se pisan salen rayadas en rojo, con la zona exacta donde se tocan, y aparecen en una lista con un enlace a cada mesa.
+- **No se guarda nada hasta que pulsas Guardar.** Guardar envía solo lo que cambió, mesa por mesa. Si la API rechaza algo (una mesa con una reserva próxima, un movimiento que dejaría a un grupo sin sitio), el aviso dice qué mesa y por qué, en el idioma del editor, y ese cambio se queda en pantalla para arreglarlo. Una mesa que no se puede quitar vuelve al plano. Los movimientos que solo fallan porque otra mesa todavía no se ha apartado se vuelven a intentar después de los demás. El navegador pregunta antes de salir con cambios sin guardar.
+- **Idiomas:** español primero e inglés de respaldo para lo que no esté traducido. Todos los textos viven en `apps/web/src/i18n`; una regla de ESLint rechaza palabras escritas directamente en los componentes y un test comprueba que el español tiene todos los textos del inglés.
+- **Accesibilidad:** foco del teclado visible, etiquetas en todos los campos, colores con contraste comprobado (el nombre de cada mesa elige texto oscuro o blanco para pasar de 4,5:1) y las pruebas en navegador pasan axe por la página de entrada y por el editor.
+
+### Las cookies de sesión en desarrollo y en producción
+
+La cookie de sesión es `__Host-`, `Secure` y `SameSite=Strict`, y la API rechaza las peticiones que el navegador marca como venidas de otro sitio. Por eso el editor tiene que salir del **mismo origen** que la API:
+
+- **En producción** la propia API sirve el editor ya construido (`apps/web/dist`, o la carpeta de `WEB_DIR`), así que hay una sola dirección y nada que configurar: ni CORS ni cookies relajadas. Las páginas llevan una política de seguridad de contenido estricta (solo archivos de la misma dirección, sin scripts en línea y sin que otra web la meta en un marco). La imagen de Docker incluye el editor.
+- **En desarrollo** Vite sirve el editor en el puerto 5173 y pasa `/auth`, `/venues` y `/health` a la API (`API_URL`, `http://127.0.0.1:3000` por defecto). El navegador solo habla con Vite, así que para él la cookie también es del mismo origen. Los navegadores aceptan cookies `Secure` en `http://localhost` y `http://127.0.0.1`, así que funciona sin HTTPS.
 
 ## Cómo se evitan las reservas dobles
 
@@ -144,14 +183,14 @@ Los propietarios cambian las reglas con `PUT /venues/:slug/booking-rules`, que l
 ## Hoja de ruta
 
 1. ~~**Motor de reservas sin reservas dobles.**~~ Hecho.
-2. **Editor del plano.** ~~API para editar zonas y mesas, comprobada por el motor.~~ Hecho. La pantalla para dibujarlas llega con el panel del local.
+2. ~~**Editor del plano.** API para editar zonas y mesas, comprobada por el motor, y la pantalla para dibujarlas.~~ Hecho.
 3. **Página pública de reserva.** Varios idiomas (también de derecha a izquierda), propone horas cercanas cuando la pedida está llena, pensada para cumplir el RGPD.
 4. **Panel del local.** El servicio del día, confirmar, cancelar, sentar, avisos por email.
 5. **Guía de despliegue.** Copias de seguridad y uso en un local de verdad.
 
 ## Tecnología
 
-Node 24, TypeScript, Fastify, PostgreSQL 18, Vitest, ESLint, Prettier, Docker Compose, GitHub Actions.
+Node 24, TypeScript, Fastify, PostgreSQL 18, React 19, Vite, Vitest con Testing Library, Playwright con axe, ESLint, Prettier, Docker Compose, GitHub Actions.
 
 ## Licencia
 

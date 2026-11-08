@@ -1,0 +1,219 @@
+import { useId } from "react";
+import type { Table } from "../api/types";
+import { useI18n } from "../i18n/i18n";
+import { isNewId } from "../plan/draft";
+import { DEFAULT_TABLE_COLOR, TABLE_COLORS, tableColor } from "../plan/colors";
+import { MAX_CM, MIN_SIZE_CM, normalizeRotation } from "../plan/geometry";
+import { NumberField } from "./ui";
+
+/** Every detail of the selected table, as form fields. Changes go into the draft at once. */
+export function TableInspector({
+  table,
+  editable,
+  problems,
+  onChange,
+  onRemove,
+}: {
+  table: Table;
+  editable: boolean;
+  problems: string[];
+  onChange: (patch: Partial<Table>) => void;
+  onRemove: () => void;
+}) {
+  const { t } = useI18n();
+  const ids = useId();
+  const color = tableColor(table.style);
+  const labelMissing = !table.label.trim();
+
+  return (
+    <section className="panel-section" aria-labelledby={`${ids}-title`}>
+      <div className="panel-heading">
+        <h2 id={`${ids}-title`}>{t.tables.panelTitle(table.label.trim() || "…")}</h2>
+        {isNewId(table.id) && <span className="badge">{t.tables.newBadge}</span>}
+      </div>
+
+      {problems.length > 0 && (
+        <ul className="problem-list" aria-label={t.issues.title}>
+          {problems.map((problem) => (
+            <li key={problem}>{problem}</li>
+          ))}
+        </ul>
+      )}
+
+      <fieldset disabled={!editable} className="inspector">
+        <div className="field">
+          <label htmlFor={`${ids}-label`}>{t.tables.label}</label>
+          <input
+            id={`${ids}-label`}
+            type="text"
+            maxLength={20}
+            value={table.label}
+            aria-invalid={labelMissing || undefined}
+            aria-describedby={labelMissing ? `${ids}-label-error` : undefined}
+            onChange={(event) => {
+              onChange({ label: event.target.value });
+            }}
+          />
+          {labelMissing && (
+            <p id={`${ids}-label-error`} className="field-error">
+              {t.tables.labelRequired}
+            </p>
+          )}
+        </div>
+
+        <fieldset className="field">
+          <legend>{t.tables.shape}</legend>
+          <div className="segmented">
+            {(["rect", "round"] as const).map((shape) => (
+              <label key={shape}>
+                <input
+                  type="radio"
+                  name={`${ids}-shape`}
+                  value={shape}
+                  checked={table.shape === shape}
+                  onChange={() => {
+                    onChange({ shape });
+                  }}
+                />
+                <span>{shape === "rect" ? t.tables.rect : t.tables.round}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <div className="field-row">
+          <NumberField
+            label={t.tables.minSeats}
+            value={table.minSeats}
+            min={1}
+            max={100}
+            disabled={!editable}
+            onChange={(minSeats) => {
+              onChange({ minSeats });
+            }}
+          />
+          <NumberField
+            label={t.tables.maxSeats}
+            value={table.maxSeats}
+            min={1}
+            max={100}
+            disabled={!editable}
+            onChange={(maxSeats) => {
+              onChange({ maxSeats });
+            }}
+          />
+        </div>
+
+        <div className="field-row">
+          <NumberField
+            label={t.tables.width}
+            value={table.width}
+            min={MIN_SIZE_CM}
+            max={MAX_CM}
+            step={5}
+            disabled={!editable}
+            onChange={(width) => {
+              onChange({ width });
+            }}
+          />
+          <NumberField
+            label={t.tables.height}
+            value={table.height}
+            min={MIN_SIZE_CM}
+            max={MAX_CM}
+            step={5}
+            disabled={!editable}
+            onChange={(height) => {
+              onChange({ height });
+            }}
+          />
+        </div>
+
+        <div className="field-row">
+          <NumberField
+            label={t.tables.x}
+            value={table.x}
+            min={-MAX_CM}
+            max={MAX_CM}
+            step={5}
+            disabled={!editable}
+            onChange={(x) => {
+              onChange({ x });
+            }}
+          />
+          <NumberField
+            label={t.tables.y}
+            value={table.y}
+            min={-MAX_CM}
+            max={MAX_CM}
+            step={5}
+            disabled={!editable}
+            onChange={(y) => {
+              onChange({ y });
+            }}
+          />
+        </div>
+
+        <NumberField
+          label={t.tables.rotation}
+          value={table.rotation}
+          min={0}
+          max={359}
+          step={15}
+          disabled={!editable}
+          onChange={(rotation) => {
+            onChange({ rotation: normalizeRotation(rotation) });
+          }}
+        />
+
+        <fieldset className="field">
+          <legend>{t.tables.color}</legend>
+          <div className="swatches">
+            {TABLE_COLORS.map((option) => (
+              <label key={option.id} className="swatch">
+                <input
+                  type="radio"
+                  name={`${ids}-color`}
+                  value={option.hex}
+                  checked={color === option.hex}
+                  onChange={() => {
+                    const style = { ...table.style };
+                    if (option.hex === DEFAULT_TABLE_COLOR) delete style.color;
+                    else style.color = option.hex;
+                    onChange({ style });
+                  }}
+                />
+                <span
+                  className="swatch-chip"
+                  style={{ background: option.hex }}
+                  aria-hidden="true"
+                />
+                <span className="swatch-name">{t.tables.colors[option.id]}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <div className="field field-check">
+          <input
+            id={`${ids}-bookable`}
+            type="checkbox"
+            checked={table.bookable}
+            aria-describedby={`${ids}-bookable-hint`}
+            onChange={(event) => {
+              onChange({ bookable: event.target.checked });
+            }}
+          />
+          <label htmlFor={`${ids}-bookable`}>{t.tables.bookable}</label>
+          <p id={`${ids}-bookable-hint`} className="field-hint">
+            {t.tables.bookableHint}
+          </p>
+        </div>
+
+        <button type="button" className="button button-danger-quiet" onClick={onRemove}>
+          {t.tables.remove}
+        </button>
+      </fieldset>
+    </section>
+  );
+}
