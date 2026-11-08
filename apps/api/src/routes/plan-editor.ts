@@ -21,6 +21,7 @@ import {
   toApiTable,
   zoneSchema,
   type ApiTable,
+  type ErrorCode,
   type TableRow,
 } from "./shared.js";
 
@@ -82,9 +83,10 @@ const tableFields = {
 
 const issuesResponse = {
   type: "object",
-  required: ["error", "issues"],
+  required: ["error", "code", "issues"],
   properties: {
     error: { type: "string" },
+    code: { type: "string", enum: ["plan_invalid"] },
     issues: {
       type: "array",
       description: "New problems the change would bring. A table being created is called `new`.",
@@ -160,8 +162,19 @@ function toApiZone(row: ZoneRow) {
 }
 
 function notFound(what: string): Outcome {
-  return { status: 404, body: { error: `${what} not found` } };
+  return { status: 404, body: { error: `${what} not found`, code: "not_found" } };
 }
+
+function conflict(code: ErrorCode, error: string, count?: number): Outcome {
+  return { status: 409, body: count === undefined ? { error, code } : { error, code, count } };
+}
+
+const CHANGED_WHILE_SAVING = "The table changed while saving. Please try again.";
+const DUPLICATE_ZONE = conflict("duplicate_name", "A zone with that name already exists");
+const DUPLICATE_TABLE = conflict(
+  "duplicate_label",
+  "A table with that label already exists in this zone",
+);
 
 function badRequest(error: string): Outcome {
   return { status: 400, body: { error } };
@@ -204,7 +217,7 @@ async function findVenueId(client: PoolClient, slug: string, lock = false): Prom
 }
 
 function tooMany(error: string): Outcome {
-  return { status: 409, body: { error } };
+  return conflict("limit_reached", error);
 }
 
 /** Locks the venue's zones with these ids, in id order, and returns the ones in use. */
@@ -250,7 +263,7 @@ function newIssues(before: PlanZone, after: PlanZone): PlanIssue[] {
 function planRefused(issues: PlanIssue[]): Outcome {
   return {
     status: 422,
-    body: { error: "The change would make the floor plan invalid", issues },
+    body: { error: "The change would make the floor plan invalid", code: "plan_invalid", issues },
   };
 }
 
@@ -303,7 +316,7 @@ function send(reply: FastifyReply, outcome: Outcome) {
 /** Turns a duplicate name or label into a 409 instead of a server error. */
 async function run(
   reply: FastifyReply,
-  duplicateMessage: string,
+  duplicate: Outcome,
   work: () => Promise<Outcome>,
 ): Promise<FastifyReply> {
   let outcome: Outcome;
@@ -311,7 +324,7 @@ async function run(
     outcome = await work();
   } catch (error) {
     if (errorCode(error) !== "23505") throw error;
-    outcome = { status: 409, body: { error: duplicateMessage } };
+    outcome = duplicate;
   }
   return send(reply, outcome);
 }
@@ -357,7 +370,7 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
       const invalid = checkText(body);
       if (invalid) return send(reply, invalid);
 
-      return run(reply, "A zone with that name already exists", () =>
+      return run(reply, DUPLICATE_ZONE, () =>
         inTransaction(pool, async (client): Promise<Outcome> => {
           const venueId = await findVenueId(client, request.params.slug, true);
           if (!venueId) return notFound("Venue");
@@ -413,7 +426,7 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
       const invalid = checkText(body);
       if (invalid) return send(reply, invalid);
 
-      return run(reply, "A zone with that name already exists", () =>
+      return run(reply, DUPLICATE_ZONE, () =>
         inTransaction(pool, async (client): Promise<Outcome> => {
           const venueId = await findVenueId(client, request.params.slug);
           if (!venueId) return notFound("Venue");
@@ -483,14 +496,12 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
             tables.map((table) => table.id),
           );
           if (upcoming > 0) {
-            return {
-              status: 409,
-              body: {
-                error:
-                  `${upcoming} upcoming reservation(s) use tables in this zone. Move or cancel ` +
-                  "them first, or mark the tables as not bookable.",
-              },
-            };
+            return conflict(
+              "upcoming_reservations",
+              `${upcoming} upcoming reservation(s) use tables in this zone. Move or cancel ` +
+                "them first, or mark the tables as not bookable.",
+              upcoming,
+            );
           }
 
           await client.query(
@@ -554,7 +565,7 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
       const invalid = checkText(body);
       if (invalid) return send(reply, invalid);
 
-      return run(reply, "A table with that label already exists in this zone", () =>
+      return run(reply, DUPLICATE_TABLE, () =>
         inTransaction(pool, async (client): Promise<Outcome> => {
           const venueId = await findVenueId(client, request.params.slug);
           if (!venueId) return notFound("Venue");
@@ -646,7 +657,7 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
       const invalid = checkText(body);
       if (invalid) return send(reply, invalid);
 
-      return run(reply, "A table with that label already exists in this zone", () =>
+      return run(reply, DUPLICATE_TABLE, () =>
         inTransaction(pool, async (client): Promise<Outcome> => {
           const venueId = await findVenueId(client, request.params.slug);
           if (!venueId) return notFound("Venue");
@@ -674,10 +685,7 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
           );
           const current = locked.rows[0];
           if (!fromZone || current?.zone_id !== fromZoneId) {
-            return {
-              status: 409,
-              body: { error: "The table changed while saving. Please try again." },
-            };
+            return conflict("changed_while_saving", CHANGED_WHILE_SAVING);
           }
 
           const before = toApiTable(current);
@@ -711,14 +719,12 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
 
           const withoutRoom = await reservationsLeftWithoutRoom(client, after);
           if (withoutRoom > 0) {
-            return {
-              status: 409,
-              body: {
-                error:
-                  `${withoutRoom} upcoming reservation(s) at this table would no longer have ` +
-                  "room. Move or cancel them first.",
-              },
-            };
+            return conflict(
+              "reservations_without_room",
+              `${withoutRoom} upcoming reservation(s) at this table would no longer have ` +
+                "room. Move or cancel them first.",
+              withoutRoom,
+            );
           }
 
           const { rows } = await client.query<TableRow>(
@@ -791,22 +797,17 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
             [tableId],
           );
           if (locked.rows[0]?.zone_id !== zoneId) {
-            return {
-              status: 409,
-              body: { error: "The table changed while saving. Please try again." },
-            };
+            return conflict("changed_while_saving", CHANGED_WHILE_SAVING);
           }
 
           const upcoming = await upcomingReservationCount(client, [tableId]);
           if (upcoming > 0) {
-            return {
-              status: 409,
-              body: {
-                error:
-                  `${upcoming} upcoming reservation(s) use this table. Move or cancel them ` +
-                  "first, or mark it as not bookable.",
-              },
-            };
+            return conflict(
+              "upcoming_reservations",
+              `${upcoming} upcoming reservation(s) use this table. Move or cancel them ` +
+                "first, or mark it as not bookable.",
+              upcoming,
+            );
           }
 
           const retired = await client.query(

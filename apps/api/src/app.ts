@@ -8,6 +8,7 @@ import { floorPlanRoutes } from "./routes/floor-plan.js";
 import { healthRoutes } from "./routes/health.js";
 import { planEditorRoutes } from "./routes/plan-editor.js";
 import { reservationRoutes, type BookingRateLimit } from "./routes/reservations.js";
+import { webRoutes } from "./routes/web.js";
 import { BusyError } from "./transaction.js";
 
 export const DEFAULT_BOOKING_RATE_LIMIT: BookingRateLimit = { max: 10, windowMs: 15 * 60_000 };
@@ -28,6 +29,8 @@ export interface AppOptions {
   maxConcurrentLogins?: number;
   /** The current time. Tests set it; everyone else gets the clock. */
   now?: () => Date;
+  /** A folder with the built staff web app, served at /. Without it, only the API answers. */
+  webDir?: string | undefined;
 }
 
 export async function buildApp({
@@ -38,6 +41,7 @@ export async function buildApp({
   loginRateLimit = DEFAULT_LOGIN_RATE_LIMIT,
   maxConcurrentLogins,
   now = () => new Date(),
+  webDir,
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger, trustProxy });
 
@@ -93,6 +97,8 @@ export async function buildApp({
   await app.register(reservationRoutes, { pool, now, rateLimit: bookingRateLimit });
 
   app.get("/openapi.json", { schema: { hide: true } }, () => app.swagger());
+
+  if (webDir !== undefined) await app.register(webRoutes, { dir: webDir });
 
   return app;
 }

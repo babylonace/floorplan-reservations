@@ -9,10 +9,32 @@ export const NO_NUL = "^[^\\u0000]*$";
 
 export const slugParam = { type: "string", pattern: SLUG_PATTERN, maxLength: 80 } as const;
 
+/** Stable names for the problems the floor plan editor routes refuse a change for. */
+export const ERROR_CODES = [
+  "not_found",
+  "duplicate_name",
+  "duplicate_label",
+  "limit_reached",
+  "upcoming_reservations",
+  "reservations_without_room",
+  "changed_while_saving",
+  "plan_invalid",
+] as const;
+export type ErrorCode = (typeof ERROR_CODES)[number];
+
+/**
+ * `error` is a sentence in English for people reading the API. `code`, when there is one, is a
+ * stable name for the problem, so programs such as the plan editor can explain it in their own
+ * language.
+ */
 export const errorResponse = {
   type: "object",
   required: ["error"],
-  properties: { error: { type: "string" } },
+  properties: {
+    error: { type: "string" },
+    code: { type: "string", enum: [...ERROR_CODES] },
+    count: { type: "integer", description: "How many reservations are in the way." },
+  },
 } as const;
 
 export const issueSchema = {

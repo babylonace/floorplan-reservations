@@ -1,0 +1,68 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { FastifyInstance } from "fastify";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { buildApp } from "../src/app.js";
+import { createPool } from "../src/db.js";
+import { CONTENT_SECURITY_POLICY } from "../src/routes/web.js";
+import { TEST_APP_OPTIONS, testDatabaseUrl } from "./helpers.js";
+
+const pool = createPool(testDatabaseUrl());
+const dir = mkdtempSync(join(tmpdir(), "floorplan-web-"));
+let app: FastifyInstance;
+
+beforeAll(async () => {
+  mkdirSync(join(dir, "assets"));
+  writeFileSync(join(dir, "index.html"), "<!doctype html><title>Plan</title>");
+  writeFileSync(join(dir, "assets", "index-abc123.js"), "console.log(1);");
+  app = await buildApp({ pool, ...TEST_APP_OPTIONS, webDir: dir });
+});
+
+afterAll(async () => {
+  await app.close();
+  await pool.end();
+  rmSync(dir, { recursive: true, force: true });
+});
+
+describe("the built web app", () => {
+  it("is served at / with a strict content security policy", async () => {
+    const response = await app.inject({ method: "GET", url: "/" });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toMatch(/text\/html/);
+    expect(response.body).toContain("<title>Plan</title>");
+    expect(response.headers["content-security-policy"]).toBe(CONTENT_SECURITY_POLICY);
+    expect(response.headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers["cache-control"]).toBe("no-cache, must-revalidate");
+  });
+
+  it("caches hashed assets for a year", async () => {
+    const response = await app.inject({ method: "GET", url: "/assets/index-abc123.js" });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("public, max-age=31536000, immutable");
+  });
+
+  it("answers files that are not there, and paths outside the folder, with 404", async () => {
+    expect((await app.inject({ method: "GET", url: "/assets/missing.js" })).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: "/../package.json" })).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: "/%2e%2e/package.json" })).statusCode).toBe(404);
+  });
+
+  it("leaves the API routes alone", async () => {
+    const response = await app.inject({ method: "GET", url: "/health" });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-security-policy"]).toBeUndefined();
+  });
+
+  it("refuses a folder without a built app", async () => {
+    const empty = mkdtempSync(join(tmpdir(), "floorplan-empty-"));
+    try {
+      await expect(buildApp({ pool, ...TEST_APP_OPTIONS, webDir: empty })).rejects.toThrow(
+        /index\.html/,
+      );
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
+  });
+});
