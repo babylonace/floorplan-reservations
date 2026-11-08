@@ -141,7 +141,10 @@ function isRealDate(date: string): boolean {
   }
 }
 
-export const bookingRulesRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool }) => {
+export const bookingRulesRoutes: FastifyPluginAsync<{ pool: Pool; now: () => Date }> = (
+  app,
+  { pool, now },
+) => {
   const tags = ["booking rules"];
   const params = {
     type: "object",
@@ -163,9 +166,9 @@ export const bookingRulesRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { po
     async (request, reply) => {
       const venue = await pool.query<{ id: string; booking_horizon_days: number; today: string }>(
         `select id, booking_horizon_days,
-                to_char((now() at time zone time_zone)::date, 'YYYY-MM-DD') as today
+                to_char(($2::timestamptz at time zone time_zone)::date, 'YYYY-MM-DD') as today
            from venues where slug = $1`,
-        [request.params.slug],
+        [request.params.slug, now()],
       );
       const row = venue.rows[0];
       if (!row) return reply.code(404).send({ error: "Venue not found" });

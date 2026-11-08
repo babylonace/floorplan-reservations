@@ -154,13 +154,15 @@ async function guestAlreadyBooked(
   const { rows } = await client.query(
     `select 1 from reservations
       where venue_id = $1 and holds_tables and starts_at < $3 and ends_at > $2
-        and (lower(guest_email) = $4 or regexp_replace(guest_phone, '[^0-9]', '', 'g') = $5)
+        -- No booking lasts a day, so older ones can be skipped without reading them.
+        and starts_at > $2::timestamptz - interval '1 day'
+        and (lower(guest_email) = lower($4) or regexp_replace(guest_phone, '[^0-9]', '', 'g') = $5)
       limit 1`,
     [
       venueId,
       startsAt,
       endsAt,
-      body.guestEmail?.toLowerCase() ?? null,
+      body.guestEmail ?? null,
       body.guestPhone === undefined ? null : phoneDigits(body.guestPhone),
     ],
   );
@@ -413,7 +415,8 @@ export const reservationRoutes: FastifyPluginAsync<ReservationRouteOptions> = (
       const venueResult = await pool.query<VenueRow>(
         `select id, default_locale, locales, booking_horizon_days,
                 to_char($2::timestamptz at time zone time_zone, 'YYYY-MM-DD') as local_date,
-                to_char($2::timestamptz at time zone time_zone, 'HH24:MI:SS') as local_time,
+                -- Counted to the minute: arriving at 15:30:30 counts as 15:30.
+                to_char($2::timestamptz at time zone time_zone, 'HH24:MI') as local_time,
                 ($2::timestamptz at time zone time_zone)::date
                   - ($3::timestamptz at time zone time_zone)::date as days_ahead
            from venues where slug = $1`,

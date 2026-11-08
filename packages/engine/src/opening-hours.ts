@@ -35,8 +35,11 @@ function parseDate(date: string): Date {
   const match = DATE.exec(date);
   if (!match) throw new Error(`Not a date: ${date}`);
   const [year, month, day] = match.slice(1).map(Number) as [number, number, number];
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-  if (parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) {
+  // Date.UTC would read years 0-99 as 1900-1999, so the year is set on its own.
+  const parsed = new Date(Date.UTC(2000, month - 1, day));
+  parsed.setUTCFullYear(year);
+  // There is no year 0 in the calendar PostgreSQL uses.
+  if (year < 1 || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) {
     throw new Error(`Not a date: ${date}`);
   }
   return parsed;

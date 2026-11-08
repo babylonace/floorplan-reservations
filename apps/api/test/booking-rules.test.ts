@@ -98,6 +98,9 @@ describe("GET and PUT /venues/:slug/booking-rules", () => {
     await venue("rules-invalid");
     const day = (date: string) => ({ date, windows: [] });
 
+    const yearZero = await put("rules-invalid", { ...RULES, specialDays: [day("0000-01-01")] });
+    expect(yearZero.statusCode).toBe(400);
+
     const february = await put("rules-invalid", { ...RULES, specialDays: [day("2030-02-31")] });
     expect(february.statusCode).toBe(400);
 

@@ -445,6 +445,8 @@ describe("limits on the public booking endpoint", () => {
     // Saturday 1 June 2030.
     expect(await at("2030-06-01T13:00:00+02:00")).toBe(201);
     expect(await at("2030-06-01T17:00:00+02:00")).toBe(422);
+    // Arrivals count to the minute.
+    expect(await at("2030-06-01T15:30:45+02:00")).toBe(201);
     expect(await at("2030-06-01T15:31:00+02:00")).toBe(422);
     // Saturday's late window, after midnight on Sunday.
     expect(await at("2030-06-02T00:15:00+02:00")).toBe(201);
@@ -505,6 +507,11 @@ describe("limits on the public booking endpoint", () => {
       startsAt: "2030-06-01T21:30:00+02:00",
     });
     expect(later.statusCode).toBe(201);
+
+    // The same guest at another venue is fine.
+    await venueWith("guard-duplicate-elsewhere", [{ label: "1", x: 100 }]);
+    const elsewhere = await book("guard-duplicate-elsewhere", { ...guest, startsAt: EIGHT_PM });
+    expect(elsewhere.statusCode).toBe(201);
 
     // Another guest at the first time is fine.
     const other = await book("guard-duplicate", { startsAt: EIGHT_PM, partySize: 2 });

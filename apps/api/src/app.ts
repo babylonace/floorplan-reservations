@@ -74,7 +74,7 @@ export async function buildApp({
   await app.register(healthRoutes, { pool });
   await app.register(floorPlanRoutes, { pool });
   await app.register(planEditorRoutes, { pool });
-  await app.register(bookingRulesRoutes, { pool });
+  await app.register(bookingRulesRoutes, { pool, now });
   await app.register(reservationRoutes, { pool, now, rateLimit: bookingRateLimit });
 
   app.get("/openapi.json", { schema: { hide: true } }, () => app.swagger());

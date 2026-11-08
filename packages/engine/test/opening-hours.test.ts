@@ -38,6 +38,10 @@ describe("dates", () => {
 
   it("refuses days that do not exist", () => {
     expect(() => isoWeekday("2030-02-31")).toThrow();
+    expect(() => isoWeekday("2031-02-29")).toThrow();
+    expect(() => isoWeekday("0000-01-01")).toThrow();
+    // 1 January of the year 50 (on the Gregorian calendar, as PostgreSQL counts it), not 1950.
+    expect(isoWeekday("0050-01-01")).toBe(6);
     expect(() => acceptsArrival(hours, SATURDAY, "24:00")).toThrow();
   });
 });
