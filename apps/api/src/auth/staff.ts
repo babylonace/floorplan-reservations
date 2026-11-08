@@ -86,7 +86,19 @@ export async function endAllSessions(db: Queryable, userId: string): Promise<num
   return rowCount ?? 0;
 }
 
-/** Sets a new password and ends every session, so an old one cannot be used any more. */
+/**
+ * Lifts the lock that failed sign-ins put on an address. Returns false when it had none.
+ * Someone who knows a staff member's address can lock it on purpose; this undoes that.
+ */
+export async function clearLoginFailures(db: Queryable, email: string): Promise<boolean> {
+  const { rowCount } = await db.query("delete from login_failures where email = $1", [email]);
+  return (rowCount ?? 0) > 0;
+}
+
+/**
+ * Sets a new password, ends every session, so an old one cannot be used any more, and lifts
+ * any lock from failed sign-ins.
+ */
 export async function setPassword(pool: Pool, userId: string, password: string): Promise<void> {
   const problem = passwordProblem(password);
   if (problem) throw new StaffError(problem);
@@ -96,6 +108,10 @@ export async function setPassword(pool: Pool, userId: string, password: string):
     await client.query("begin");
     await client.query("update staff_users set password_hash = $2 where id = $1", [userId, hash]);
     await endAllSessions(client, userId);
+    await client.query(
+      "delete from login_failures where email = (select email from staff_users where id = $1)",
+      [userId],
+    );
     await client.query("commit");
     client.release();
   } catch (error) {

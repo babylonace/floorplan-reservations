@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
-import { dummyHash, verifyPassword } from "../auth/passwords.js";
+import { makeDummyHash, verifyPassword } from "../auth/passwords.js";
 import {
   clearedSessionCookie,
   createSession,
@@ -12,7 +12,7 @@ import {
 } from "../auth/sessions.js";
 import { normalizeEmail, ROLES, type Role } from "../auth/staff.js";
 import type { Pool } from "../db.js";
-import { errorResponse } from "./shared.js";
+import { errorResponse, SLUG_PATTERN } from "./shared.js";
 
 /**
  * Staff sign in with their e-mail address and password, and get a session cookie. Routes that
@@ -28,6 +28,13 @@ export interface RateLimit {
 /** Failed sign-ins one e-mail address may have per window, from any number of places. */
 export const MAX_LOGIN_FAILURES = 10;
 export const LOGIN_FAILURE_WINDOW_SECONDS = 15 * 60;
+/**
+ * Sign-ins checking a password at once, from everyone together. Each check needs 32 MiB and a
+ * slot in Node's small pool of worker threads, so a flood of them would slow everything else.
+ */
+export const DEFAULT_MAX_CONCURRENT_LOGINS = 16;
+
+const SLUG = new RegExp(SLUG_PATTERN);
 
 const WRONG_LOGIN = "Wrong e-mail address or password.";
 const LOCKED_OUT = "Too many failed sign-ins for this address. Please try again in 15 minutes.";
@@ -66,7 +73,9 @@ export function requireVenueRole(
     if (fromAnotherSite(request)) return refuseOtherSites(reply);
     const token = readSessionCookie(request.headers.cookie);
     const { slug } = request.params as { slug?: string };
-    const user = token ? await findSession(pool, token, now(), slug ?? null) : null;
+    // Hooks run before the address is checked; a slug no venue can have names no venue.
+    const venue = slug !== undefined && SLUG.test(slug) ? slug : null;
+    const user = token ? await findSession(pool, token, now(), venue) : null;
     if (!user) return reply.code(401).send({ error: "Please sign in first." });
     if (!user.role || !roles.includes(user.role)) {
       return reply.code(403).send({ error: "Your account may not do this at this venue." });
@@ -125,10 +134,16 @@ export interface AuthRouteOptions {
   pool: Pool;
   now: () => Date;
   rateLimit: RateLimit;
+  maxConcurrentLogins?: number;
 }
 
-export const authRoutes: FastifyPluginAsync<AuthRouteOptions> = (app, { pool, now, rateLimit }) => {
+export const authRoutes: FastifyPluginAsync<AuthRouteOptions> = async (
+  app,
+  { pool, now, rateLimit, maxConcurrentLogins = DEFAULT_MAX_CONCURRENT_LOGINS },
+) => {
   const tags = ["staff sign-in"];
+  const dummyHash = await makeDummyHash();
+  let checking = 0;
 
   app.post<{ Body: { email: string; password: string } }>(
     "/auth/login",
@@ -155,6 +170,7 @@ export const authRoutes: FastifyPluginAsync<AuthRouteOptions> = (app, { pool, no
           401: errorResponse,
           403: errorResponse,
           429: errorResponse,
+          503: errorResponse,
         },
       },
     },
@@ -175,11 +191,21 @@ export const authRoutes: FastifyPluginAsync<AuthRouteOptions> = (app, { pool, no
           )
         : { rows: [] };
       const user = rows[0];
-      // Unknown addresses are checked against a hash too, so they take just as long.
-      const matches = await verifyPassword(
-        request.body.password,
-        user?.password_hash ?? (await dummyHash()),
-      );
+      if (checking >= maxConcurrentLogins) {
+        return reply
+          .code(503)
+          .header("retry-after", "5")
+          .send({ error: "Too busy right now. Please try again in a few seconds." });
+      }
+      // The attempt above still counts: a busy server gives no free guesses.
+      checking += 1;
+      let matches: boolean;
+      try {
+        // Unknown addresses are checked against a hash too, so they take just as long.
+        matches = await verifyPassword(request.body.password, user?.password_hash ?? dummyHash);
+      } finally {
+        checking -= 1;
+      }
       if (!user || !matches) return reply.code(401).send({ error: WRONG_LOGIN });
 
       await pool.query("delete from login_failures where email = $1", [email]);
@@ -230,8 +256,6 @@ export const authRoutes: FastifyPluginAsync<AuthRouteOptions> = (app, { pool, no
       return account(pool, user.id, user.email);
     },
   );
-
-  return Promise.resolve();
 };
 
 /** The OpenAPI description of the session cookie. */

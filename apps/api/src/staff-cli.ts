@@ -9,6 +9,9 @@ import { runStaffCommand } from "./staff-commands.js";
  * one line of standard input, which lets a script pass it without it ever being an argument.
  */
 
+// What was pasted after the first Enter, kept for the next question.
+let pending = "";
+
 function readHidden(prompt: string): Promise<string> {
   const input = process.stdin;
   process.stdout.write(prompt);
@@ -17,29 +20,44 @@ function readHidden(prompt: string): Promise<string> {
   input.resume();
   let typed = "";
   return new Promise((resolve, reject) => {
-    const finish = () => {
+    const finish = (rest: string) => {
       input.off("data", onData);
       input.setRawMode(false);
       input.pause();
       process.stdout.write("\n");
+      pending = rest;
     };
     const onData = (chunk: string) => {
-      for (const char of chunk) {
+      // Arrow keys and the like send escape sequences; they are not part of a password.
+      if (chunk.startsWith("\u001b")) return;
+      const chars = Array.from(chunk);
+      for (const [index, char] of chars.entries()) {
         if (char === "\r" || char === "\n") {
-          finish();
+          finish(
+            chars
+              .slice(index + 1)
+              .join("")
+              .replace(/^\n/, ""),
+          );
           resolve(typed);
           return;
         }
         if (char === "\u0003" || char === "\u0004") {
-          finish();
+          finish("");
           reject(new StaffError("Cancelled."));
           return;
         }
         if (char === "\u007f" || char === "\b") typed = Array.from(typed).slice(0, -1).join("");
-        else typed += char;
+        // Other control characters (Tab, Ctrl+letter) are left out too.
+        else if (char >= " ") typed += char;
       }
     };
     input.on("data", onData);
+    if (pending) {
+      const earlier = pending;
+      pending = "";
+      onData(earlier);
+    }
   });
 }
 

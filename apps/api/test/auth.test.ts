@@ -3,7 +3,14 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { hashPassword, passwordProblem, verifyPassword } from "../src/auth/passwords.js";
 import { IDLE_SECONDS, MAX_AGE_SECONDS, SESSION_COOKIE } from "../src/auth/sessions.js";
-import { createUser, grantRole, removeRole, setPassword, type Role } from "../src/auth/staff.js";
+import {
+  clearLoginFailures,
+  createUser,
+  grantRole,
+  removeRole,
+  setPassword,
+  type Role,
+} from "../src/auth/staff.js";
 import { createPool } from "../src/db.js";
 import { MAX_LOGIN_FAILURES } from "../src/routes/auth.js";
 import {
@@ -208,6 +215,13 @@ describe("signing in and out", () => {
     expect((await me(cookie)).statusCode).toBe(401);
   });
 
+  it("signs out quietly with no session or a made-up one", async () => {
+    for (const headers of [{}, { cookie: `${SESSION_COOKIE}=${"b".repeat(43)}` }]) {
+      const response = await app.inject({ method: "POST", url: "/auth/logout", headers });
+      expect(response.statusCode).toBe(204);
+    }
+  });
+
   it("answers 401 to /auth/me without a session or with a made-up one", async () => {
     expect((await me()).statusCode).toBe(401);
     expect((await me(`${SESSION_COOKIE}=${"a".repeat(43)}`)).statusCode).toBe(401);
@@ -232,8 +246,11 @@ describe("signing in and out", () => {
       const response = await login(email, TEST_PASSWORD, { "sec-fetch-site": site });
       expect(response.statusCode).toBe(403);
     }
-    const sameOrigin = await login(email, TEST_PASSWORD, { "sec-fetch-site": "same-origin" });
-    expect(sameOrigin.statusCode).toBe(200);
+    // Same origin, an address typed by hand, and programs that send no such header are fine.
+    for (const site of ["same-origin", "none"]) {
+      expect((await login(email, TEST_PASSWORD, { "sec-fetch-site": site })).statusCode).toBe(200);
+    }
+    expect((await login(email, TEST_PASSWORD)).statusCode).toBe(200);
   });
 });
 
@@ -311,6 +328,45 @@ describe("limits on sign-in attempts", () => {
       expect((await login(email, "a wrong guess here")).statusCode).toBe(401);
     }
     expect((await login(email, "a wrong guess here")).statusCode).toBe(429);
+  });
+
+  it("lifts the lock when staff unlock the address or set a new password", async () => {
+    const { id, email } = await account();
+    for (let attempt = 0; attempt <= MAX_LOGIN_FAILURES; attempt += 1) {
+      await login(email, "a wrong guess here");
+    }
+    expect((await login(email, TEST_PASSWORD)).statusCode).toBe(429);
+    expect(await clearLoginFailures(pool, email)).toBe(true);
+    expect((await login(email, TEST_PASSWORD)).statusCode).toBe(200);
+
+    for (let attempt = 0; attempt <= MAX_LOGIN_FAILURES; attempt += 1) {
+      await login(email, "a wrong guess here");
+    }
+    await setPassword(pool, id, "a brand new test password");
+    expect((await login(email, "a brand new test password")).statusCode).toBe(200);
+  });
+
+  it("answers 503 when too many passwords are being checked at once", async () => {
+    const busy = await buildApp({ pool, ...TEST_APP_OPTIONS, maxConcurrentLogins: 1 });
+    try {
+      const { email } = await account();
+      const responses = await Promise.all(
+        Array.from({ length: 4 }, () =>
+          busy.inject({
+            method: "POST",
+            url: "/auth/login",
+            payload: { email, password: TEST_PASSWORD },
+          }),
+        ),
+      );
+      const codes = responses.map((response) => response.statusCode).sort();
+      expect(codes[0]).toBe(200);
+      expect(codes).toContain(503);
+      const refused = responses.find((response) => response.statusCode === 503);
+      expect(refused?.headers["retry-after"]).toBe("5");
+    } finally {
+      await busy.close();
+    }
   });
 
   it("starts counting again after a successful sign-in", async () => {
@@ -436,6 +492,26 @@ describe("who may change a venue", () => {
       payload: { label: "taken" },
     });
     expect(response.statusCode).toBe(404);
+  });
+
+  it("refuses an address with characters no venue can have, without a server error", async () => {
+    await venue("auth-odd");
+    const owner = await account("auth-odd", "owner");
+    const cookie = await signIn(app, owner.email, TEST_PASSWORD);
+    for (const slug of ["%00", "AUTH-ODD", "auth-odd%00", "auth_odd"]) {
+      const response = await addZone(slug, { cookie });
+      expect({ slug, status: response.statusCode }).toEqual({ slug, status: 403 });
+    }
+  });
+
+  it("takes effect at once when an owner becomes plain staff", async () => {
+    await venue("auth-demoted");
+    const owner = await account("auth-demoted", "owner");
+    const cookie = await signIn(app, owner.email, TEST_PASSWORD);
+    expect((await addZone("auth-demoted", { cookie })).statusCode).toBe(201);
+
+    await grantRole(pool, owner.id, "auth-demoted", "staff");
+    expect((await addZone("auth-demoted", { cookie })).statusCode).toBe(403);
   });
 
   it("takes effect at once when an owner is taken off a venue", async () => {

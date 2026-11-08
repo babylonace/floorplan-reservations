@@ -166,6 +166,19 @@ describe("the staff command line", () => {
     expect((await run(["list", "--venue", "cli-list"])).output).toBe("Nobody runs this venue yet.");
   });
 
+  it("unlocks an address locked by failed sign-ins", async () => {
+    await pool.query(
+      "insert into login_failures (email, failures, window_start) values ($1, 50, $2)",
+      ["cli-locked@example.com", TEST_NOW],
+    );
+    expect((await run(["unlock", "--email", "CLI-Locked@example.com"])).output).toBe(
+      "cli-locked@example.com can sign in again.",
+    );
+    expect((await run(["unlock", "--email", "cli-locked@example.com"])).output).toBe(
+      "cli-locked@example.com was not locked.",
+    );
+  });
+
   it("explains what is wrong with the arguments", async () => {
     await venue("cli-args");
     const cases: [string[], RegExp][] = [

@@ -11,6 +11,7 @@ import {
   ROLES,
   setPassword,
   StaffError,
+  clearLoginFailures,
   venueId,
 } from "./auth/staff.js";
 import type { Pool } from "./db.js";
@@ -27,11 +28,14 @@ export const USAGE = `Usage: npm run staff -- <command> [options]
       Gives the address that role at the venue. Creates the account first if there is
       none, asking for its password twice.
   password --email <address>
-      Sets a new password (asked twice) and signs the account out everywhere.
+      Sets a new password (asked twice), signs the account out everywhere and
+      unlocks it.
   remove --venue <slug> --email <address>
       Takes the account off the venue. It keeps its access to other venues.
   sign-out --email <address>
       Ends every session of the account.
+  unlock --email <address>
+      Lets the address sign in again after too many failed attempts.
   list --venue <slug>
       Shows who may run the venue, and their role.`;
 
@@ -119,6 +123,12 @@ export async function runStaffCommand(
       case "sign-out": {
         const ended = await endAllSessions(pool, await existingUser(pool, emailOption(values)));
         io.print(`Ended ${String(ended)} session(s).`);
+        return 0;
+      }
+      case "unlock": {
+        const email = emailOption(values);
+        const lifted = await clearLoginFailures(pool, email);
+        io.print(lifted ? `${email} can sign in again.` : `${email} was not locked.`);
         return 0;
       }
       case "list": {

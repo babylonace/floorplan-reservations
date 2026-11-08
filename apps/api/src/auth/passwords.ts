@@ -102,13 +102,11 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return timingSafeEqual(key, parsed.key);
 }
 
-let dummy: Promise<string> | undefined;
-
 /**
  * A hash nobody's password matches. Sign-ins for unknown addresses check against it, so they
- * take as long as real ones and the timing does not tell which addresses have an account.
+ * take as long as real ones and the timing does not tell which addresses have an account. The
+ * app makes one when it starts, so even the first unknown address takes no longer than others.
  */
-export function dummyHash(): Promise<string> {
-  dummy ??= hashPassword(randomBytes(32).toString("base64"));
-  return dummy;
+export function makeDummyHash(): Promise<string> {
+  return hashPassword(randomBytes(32).toString("base64"));
 }

@@ -24,6 +24,8 @@ export interface AppOptions {
   bookingRateLimit?: BookingRateLimit;
   /** Sign-in requests one address may send per window, on top of the limit per e-mail address. */
   loginRateLimit?: RateLimit;
+  /** Sign-ins checking a password at the same time; more get 503. */
+  maxConcurrentLogins?: number;
   /** The current time. Tests set it; everyone else gets the clock. */
   now?: () => Date;
 }
@@ -34,6 +36,7 @@ export async function buildApp({
   trustProxy = false,
   bookingRateLimit = DEFAULT_BOOKING_RATE_LIMIT,
   loginRateLimit = DEFAULT_LOGIN_RATE_LIMIT,
+  maxConcurrentLogins,
   now = () => new Date(),
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger, trustProxy });
@@ -79,7 +82,12 @@ export async function buildApp({
 
   await app.register(healthRoutes, { pool });
   await app.register(floorPlanRoutes, { pool });
-  await app.register(authRoutes, { pool, now, rateLimit: loginRateLimit });
+  await app.register(authRoutes, {
+    pool,
+    now,
+    rateLimit: loginRateLimit,
+    ...(maxConcurrentLogins === undefined ? {} : { maxConcurrentLogins }),
+  });
   await app.register(planEditorRoutes, { pool, now });
   await app.register(bookingRulesRoutes, { pool, now });
   await app.register(reservationRoutes, { pool, now, rateLimit: bookingRateLimit });
