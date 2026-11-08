@@ -32,6 +32,7 @@ export const en = {
   loadingTimes: "Looking for free tables…",
   noTimes: "No times left on this day. Try another day.",
   timesFailed: "The times could not load.",
+  fullInZone: (time: string, zone: string) => `${time}, full in ${zone}`,
   fullTime: (time: string) => `${time}, full`,
   zoneFull: (zone: string, time: string) => `${zone} is full at ${time}.`,
   otherTimes: (zone: string) => `Other times in ${zone}`,

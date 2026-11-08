@@ -37,6 +37,7 @@ export const ar: DeepPartial<BookingMessages> = {
   loadingTimes: "نبحث عن طاولات متاحة…",
   noTimes: "لا توجد أوقات متبقية في هذا اليوم. جرّب يومًا آخر.",
   timesFailed: "تعذّر تحميل الأوقات.",
+  fullInZone: (time: string, zone: string) => `${time}، ${zone} ممتلئة`,
   fullTime: (time: string) => `${time}، ممتلئ`,
   zoneFull: (zone: string, time: string) => `${zone} ممتلئة في الساعة ${time}.`,
   otherTimes: (zone: string) => `أوقات أخرى في ${zone}`,

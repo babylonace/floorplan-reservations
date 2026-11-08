@@ -32,6 +32,7 @@ export const es: DeepPartial<BookingMessages> = {
   loadingTimes: "Buscando mesas libres…",
   noTimes: "No quedan horas este día. Prueba otro día.",
   timesFailed: "No se pudieron cargar las horas.",
+  fullInZone: (time: string, zone: string) => `${time}, ${zone} completa`,
   fullTime: (time: string) => `${time}, completo`,
   zoneFull: (zone: string, time: string) => `${zone} está completa a las ${time}.`,
   otherTimes: (zone: string) => `Otras horas en ${zone}`,

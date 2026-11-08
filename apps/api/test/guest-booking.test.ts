@@ -162,6 +162,44 @@ describe("GET /venues/:slug/availability", () => {
     expect((await availability("avail-dates", "2030-07-20")).body.slots).toEqual([]);
   });
 
+  it("leaves out times past midnight that fall beyond the horizon", async () => {
+    await threeZones("avail-late");
+    await pool.query(
+      `update opening_hours set first_arrival = '20:00', last_arrival = '01:00'
+        where venue_id = (select id from venues where slug = 'avail-late')`,
+    );
+    // 2030-07-19 is the last day of the 60-day horizon; its 00:30 is on the 20th.
+    const last = await availability("avail-late", "2030-07-19");
+    expect(last.body.slots.at(-1)?.time).toBe("23:45");
+    const before = await availability("avail-late", "2030-07-18");
+    expect(before.body.slots.at(-1)?.time).toBe("01:00");
+  });
+
+  it("skips the hour the clocks jump over in spring", async () => {
+    await threeZones("avail-dst");
+    await pool.query("update venues set booking_horizon_days = 730 where slug = 'avail-dst'");
+    // In Madrid, 2031-03-30 goes from 02:00 straight to 03:00.
+    const { body } = await availability("avail-dst", "2031-03-30");
+    const times = body.slots.map((slot) => slot.time);
+    expect(times).toHaveLength(92);
+    expect(times).not.toContain("02:30");
+    expect(body.slots.find((slot) => slot.time === "03:00")?.startsAt).toBe(
+      "2031-03-30T01:00:00.000Z",
+    );
+  });
+
+  it("does not offer a zone that has nothing to book online", async () => {
+    const zones = await threeZones("options-empty");
+    await pool.query("update dining_tables set bookable = false where zone_id = $1", [
+      zones.terrace,
+    ]);
+    const response = await app.inject({
+      method: "GET",
+      url: "/venues/options-empty/booking-options",
+    });
+    expect(response.json<Options>().zones.map((zone) => zone.name)).toEqual(["Room"]);
+  });
+
   it("has no times for a party too big to book online", async () => {
     await threeZones("avail-big");
     expect((await availability("avail-big", DAY, 13)).body.slots).toEqual([]);

@@ -125,6 +125,17 @@ type FieldErrors = Partial<Record<"name" | "contact" | "email" | "phone", string
 const EMPTY_FIELDS: Fields = { name: "", email: "", phone: "", notes: "" };
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * What a phone field keeps: digits (Arabic and Persian ones become 0-9, as the API wants), a
+ * leading plus, spaces, brackets and dashes.
+ */
+export function phoneInput(value: string): string {
+  return value
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[^+0-9 ()-]/g, "");
+}
+
 export function checkFields(t: BookingMessages, fields: Fields): FieldErrors {
   const errors: FieldErrors = {};
   const email = fields.email.trim();
@@ -183,11 +194,17 @@ function BookingFlow({
   const [errors, setErrors] = useState<FieldErrors>({});
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<NoticeMessage | null>(null);
-  const [booked, setBooked] = useState<{ booking: Booking; date: string; time: string } | null>(
-    null,
-  );
+  const [booked, setBooked] = useState<{ booking: Booking; time: string } | null>(null);
   const form = useRef<HTMLFormElement>(null);
   const doneHeading = useRef<HTMLHeadingElement>(null);
+  /** Set by picking a suggestion, whose button then goes away: focus goes to the chosen time. */
+  const focusChosen = useRef(false);
+  useEffect(() => {
+    if (!focusChosen.current) return;
+    focusChosen.current = false;
+    form.current?.querySelector<HTMLElement>('.slot[aria-pressed="true"]')?.focus();
+  }, [time, zoneId]);
+
   /** Set by a refused submit: the first field in error gets focus once it shows as one. */
   const focusError = useRef(false);
 
@@ -231,13 +248,14 @@ function BookingFlow({
   );
   const zoneFull = chosen !== undefined && zoneId !== "" && !chosen.zoneIds.includes(zoneId);
   const ready = chosen !== undefined && !zoneFull;
-  const dayName = (day: string) =>
+  // The day of the arrival itself, in the venue's time zone: 00:30 is already the next day.
+  const dayOf = (startsAt: string) =>
     new Intl.DateTimeFormat(dateTag(locale), {
       weekday: "long",
       day: "numeric",
       month: "long",
-      timeZone: "UTC",
-    }).format(new Date(`${day}T00:00:00Z`));
+      timeZone: options.timeZone,
+    }).format(new Date(startsAt));
 
   async function submit(event: SubmitEvent) {
     event.preventDefault();
@@ -266,7 +284,7 @@ function BookingFlow({
     setNotice(null);
     try {
       const booking = await client.book(slug, request);
-      setBooked({ booking, date, time: chosen.time });
+      setBooked({ booking, time: chosen.time });
     } catch (error) {
       const refusal = refusalOf(t, error);
       setNotice({ tone: "error", text: refusal.text });
@@ -284,7 +302,7 @@ function BookingFlow({
           {t.doneTitle}
         </h2>
         <p className="booking-summary">
-          {t.summary(booked.booking.partySize, dayName(booked.date), booked.time)}
+          {t.summary(booked.booking.partySize, dayOf(booked.booking.startsAt), booked.time)}
         </p>
         {zone && <p>{t.doneZone(zone)}</p>}
         <p>{t.doneBody}</p>
@@ -396,7 +414,17 @@ function BookingFlow({
                     className="slot"
                     aria-pressed={slot.time === chosen?.time}
                     aria-disabled={!slot.available || undefined}
-                    aria-label={slot.available ? undefined : t.fullTime(slot.time)}
+                    aria-label={
+                      !slot.available
+                        ? t.fullTime(slot.time)
+                        : zoneId && !slot.zoneIds.includes(zoneId)
+                          ? t.fullInZone(slot.time, zoneName(zoneId))
+                          : undefined
+                    }
+                    data-elsewhere={
+                      (slot.available && zoneId !== "" && !slot.zoneIds.includes(zoneId)) ||
+                      undefined
+                    }
                     onClick={() => {
                       if (slot.available) setTime(slot.time);
                     }}
@@ -413,8 +441,14 @@ function BookingFlow({
                   time={chosen.time}
                   zoneId={zoneId}
                   zoneName={zoneName}
-                  onTime={setTime}
-                  onZone={setZoneId}
+                  onTime={(next) => {
+                    focusChosen.current = true;
+                    setTime(next);
+                  }}
+                  onZone={(next) => {
+                    focusChosen.current = true;
+                    setZoneId(next);
+                  }}
                 />
               )}
             </div>
@@ -435,7 +469,7 @@ function BookingFlow({
             />
             <p className="booking-privacy">{t.privacy(options.name)}</p>
             <p className="booking-summary">
-              {t.summary(party, dayName(date ?? today), chosen.time)}
+              {t.summary(party, dayOf(chosen.startsAt), chosen.time)}
               {zoneId && ` · ${zoneName(zoneId)}`}
             </p>
             <button
@@ -611,7 +645,7 @@ function DetailsFields({
             )}
             onChange={(event) => {
               // Only what a phone number can hold, as the API accepts it.
-              onChange({ ...fields, phone: event.target.value.replace(/[^+0-9 ()-]/g, "") });
+              onChange({ ...fields, phone: phoneInput(event.target.value) });
             }}
           />
           {errors.phone && (

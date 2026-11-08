@@ -126,6 +126,19 @@ export const guestBookingRoutes: FastifyPluginAsync<{
     return rows[0];
   }
 
+  async function selectableZones(venueId: string) {
+    const { rows } = await pool.query<{ id: string; name: string }>(
+      `select z.id, z.name from zones z
+          where z.venue_id = $1 and z.guest_selectable and z.retired_at is null
+            -- A zone with nothing to book online is not offered, whatever its setting.
+            and exists (select 1 from dining_tables t
+                         where t.zone_id = z.id and t.bookable and t.retired_at is null)
+          order by z.sort_order, z.name`,
+      [venueId],
+    );
+    return rows;
+  }
+
   app.get<{ Params: { slug: string } }>(
     "/venues/:slug/booking-options",
     {
@@ -139,19 +152,14 @@ export const guestBookingRoutes: FastifyPluginAsync<{
     async (request, reply) => {
       const venue = await findVenue(request.params.slug);
       if (!venue) return reply.code(404).send({ error: "Venue not found" });
-      const zones = await pool.query<{ id: string; name: string }>(
-        `select id, name from zones
-          where venue_id = $1 and guest_selectable and retired_at is null
-          order by sort_order, name`,
-        [venue.id],
-      );
+      const zones = await selectableZones(venue.id);
       return {
         name: venue.name,
         timeZone: venue.time_zone,
         defaultLocale: venue.default_locale,
         locales: venue.locales,
         largestParty: largestParty(),
-        zones: zones.rows,
+        zones,
       };
     },
   );
@@ -197,36 +205,42 @@ export const guestBookingRoutes: FastifyPluginAsync<{
       const times = arrivalTimes(hours, date, ARRIVAL_STEP_MINUTES);
       if (times.length === 0) return { date, slots: [] };
 
-      // Local date and time to an instant, in the venue's own time zone.
-      const instants = await pool.query<{ at: Date }>(
-        `select (x.day + x.at::time) at time zone $3 as at
+      // Local date and time to an instant, in the venue's own time zone, and back again: a
+      // time the clocks skip when they go forward (02:30 on that night) comes back different.
+      const instants = await pool.query<{ at: Date; back: string }>(
+        `select i.at, to_char(i.at at time zone $3, 'YYYY-MM-DD HH24:MI') as back
            from unnest($1::date[], $2::text[]) with ordinality as x (day, at, n)
+           cross join lateral (select (x.day + x.at::time) at time zone $3 as at) i
           order by x.n`,
         [times.map((slot) => slot.date), times.map((slot) => slot.time), venue.time_zone],
       );
       const current = now().getTime();
       const upcoming = times
-        .map((slot, index) => ({ ...slot, at: instants.rows[index]?.at ?? new Date(0) }))
-        .filter((slot) => slot.at.getTime() > current);
+        .map((slot, index) => ({ ...slot, ...instants.rows[index] }))
+        .filter(
+          (slot): slot is typeof slot & { at: Date; back: string } =>
+            slot.at !== undefined &&
+            slot.back === `${slot.date} ${slot.time}` &&
+            slot.at.getTime() > current &&
+            // Times past midnight count from their own date, as the booking does.
+            daysBetween(venue.today, slot.date) <= venue.booking_horizon_days,
+        );
       const first = upcoming[0];
       const last = upcoming.at(-1);
       if (!first || !last) return { date, slots: [] };
 
       const lengthMs = minutes * 60_000;
-      const [plan, selectable, held] = await Promise.all([
-        loadPlan(pool, venue.id),
-        pool.query<{ id: string }>(
-          "select id from zones where venue_id = $1 and guest_selectable and retired_at is null",
-          [venue.id],
-        ),
-        pool.query<{ table_id: string; starts: Date; ends: Date }>(
-          `select table_id, lower(during) as starts, upper(during) as ends
-             from reservation_tables
-            where venue_id = $1 and holds_tables and during && tstzrange($2, $3, '[)')`,
-          [venue.id, first.at, new Date(last.at.getTime() + lengthMs)],
-        ),
-      ]);
-      const offered = new Set(selectable.rows.map((row) => row.id));
+      // One after the other, so a public request never holds more than one connection.
+      const plan = await loadPlan(pool, venue.id);
+      const offered = new Set((await selectableZones(venue.id)).map((zone) => zone.id));
+      const held = await pool.query<{ table_id: string; starts: Date; ends: Date }>(
+        `select table_id, lower(during) as starts, upper(during) as ends
+           from reservation_tables
+          where venue_id = $1 and holds_tables and during && tstzrange($2, $3, '[)')`,
+        [venue.id, first.at, new Date(last.at.getTime() + lengthMs)],
+      );
+      // Many times of a day see the same tables taken, so the engine runs once per set.
+      const seen = new Map<string, string[]>();
 
       const slots: Slot[] = upcoming.map((slot) => {
         const start = slot.at.getTime();
@@ -236,17 +250,19 @@ export const guestBookingRoutes: FastifyPluginAsync<{
             .filter((row) => row.starts.getTime() < end && row.ends.getTime() > start)
             .map((row) => row.table_id),
         );
-        const options = seatingOptions(partySize, plan, busy);
-        const withRoom = new Set(options.map((option) => option.zoneId));
-        // In the venue's order, like the zone picker.
-        const zoneIds = plan
-          .map((zone) => zone.id)
-          .filter((id) => withRoom.has(id) && offered.has(id));
+        const key = [...busy].sort().join();
+        let withRoom = seen.get(key);
+        if (!withRoom) {
+          const zones = new Set(seatingOptions(partySize, plan, busy).map((o) => o.zoneId));
+          // In the venue's order, like the zone picker.
+          withRoom = plan.map((zone) => zone.id).filter((id) => zones.has(id));
+          seen.set(key, withRoom);
+        }
         return {
           time: slot.time,
           startsAt: slot.at.toISOString(),
-          available: options.length > 0,
-          zoneIds,
+          available: withRoom.length > 0,
+          zoneIds: withRoom.filter((id) => offered.has(id)),
         };
       });
       return { date, slots };

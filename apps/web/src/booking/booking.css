@@ -157,6 +157,13 @@
   text-decoration: line-through;
 }
 
+/* Free, but not in the zone the guest asked for: picking it shows what else there is. */
+.slot[data-elsewhere]:not([aria-pressed="true"]) {
+  border-style: dashed;
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
 /* Times */
 
 .slot-grid {

@@ -110,9 +110,9 @@ export function Calendar({
           </svg>
           <ButtonLabel full={t.previousMonth} />
         </button>
-        <h3 id={`${ids}-month`} className="calendar-month" aria-live="polite">
+        <h2 id={`${ids}-month`} className="calendar-month" aria-live="polite">
           {monthName}
-        </h3>
+        </h2>
         <button
           type="button"
           className="button button-quiet calendar-nav"

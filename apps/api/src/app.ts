@@ -15,7 +15,7 @@ import { BusyError } from "./transaction.js";
 export const DEFAULT_BOOKING_RATE_LIMIT: BookingRateLimit = { max: 10, windowMs: 15 * 60_000 };
 /** Each change on the booking page (day, party size) asks once, so this leaves plenty of room. */
 export const DEFAULT_AVAILABILITY_RATE_LIMIT: AvailabilityRateLimit = {
-  max: 300,
+  max: 120,
   windowMs: 15 * 60_000,
 };
 export const DEFAULT_LOGIN_RATE_LIMIT: RateLimit = { max: 30, windowMs: 15 * 60_000 };

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/client";
 import { ApiProvider } from "../src/api/context";
 import type { BookingOptions, BookingRules, Slot } from "../src/api/types";
-import { BookingPage, checkFields, slugFromPath } from "../src/booking/BookingPage";
+import { BookingPage, checkFields, phoneInput, slugFromPath } from "../src/booking/BookingPage";
 import { ar } from "../src/booking/ar";
 import {
   alternativesFor,
@@ -142,6 +142,11 @@ describe("calendar sums", () => {
     expect(alternativesFor(SLOTS, "23:00", TERRACE)).toEqual({ times: [], zoneIds: [] });
   });
 
+  it("turns Arabic and Persian digits in a phone number into 0-9", () => {
+    expect(phoneInput("+٣٤ ٦٠٠ ۱۲۳")).toBe("+34 600 123");
+    expect(phoneInput("600-abc")).toBe("600-");
+  });
+
   it("checks only what the booking needs", () => {
     const t = bookingMessages("es");
     expect(checkFields(t, { name: " ", email: "", phone: "", notes: "" })).toEqual({
@@ -200,7 +205,10 @@ describe("BookingPage", () => {
     renderPage();
 
     await user.selectOptions(await screen.findByLabelText("Zona"), "Terraza");
-    await user.click(await screen.findByRole("button", { name: "20:30" }));
+    // Free, but not on the terrace: marked as such before it is even picked.
+    const elsewhere = await screen.findByRole("button", { name: "20:30, Terraza completa" });
+    expect(elsewhere).toHaveAttribute("data-elsewhere");
+    await user.click(elsewhere);
     expect(screen.getByText("Terraza está completa a las 20:30.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Nombre")).not.toBeInTheDocument();
 
@@ -215,6 +223,8 @@ describe("BookingPage", () => {
 
     expect(screen.getByLabelText("Zona")).toHaveValue(ROOM);
     expect(screen.getByLabelText("Nombre")).toBeInTheDocument();
+    // The suggestion's button is gone; the keyboard lands on the chosen time.
+    expect(screen.getByRole("button", { name: "20:30" })).toHaveFocus();
   });
 
   it("does not let a full time be picked, and says it is full", async () => {

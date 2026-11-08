@@ -40,17 +40,13 @@ export function dateTag(locale: BookingLocale): string {
   return locale === "es" ? "es-ES" : locale === "en" ? "en-GB" : "ar-u-nu-latn";
 }
 
-/** The language picked last time on this device, else the first one the browser asks for. */
+/** The language picked last time on this device, else Spanish; guests change it on the page. */
 export function initialBookingLocale(): BookingLocale {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (isBookingLocale(stored)) return stored;
   } catch {
-    // Private windows may refuse; then the browser's languages decide.
-  }
-  for (const tag of navigator.languages) {
-    const base = tag.slice(0, 2).toLowerCase();
-    if (isBookingLocale(base)) return base;
+    // Private windows may refuse; then the page opens in Spanish.
   }
   return "es";
 }
