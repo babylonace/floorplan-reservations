@@ -42,19 +42,23 @@ export interface Box {
 
 /**
  * The axis-aligned box that contains a table once it is rotated.
- * A round table is a circle (or an ellipse when width and height differ), so rotation
- * only matters for rectangles.
+ * A round table is an ellipse (a circle when width and height match).
  */
 export function boundingBox(table: PlanTable): Box {
-  let halfWidth = table.width / 2;
-  let halfHeight = table.height / 2;
+  const radians = (table.rotation * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(radians));
+  const sin = Math.abs(Math.sin(radians));
+  let halfWidth: number;
+  let halfHeight: number;
 
   if (table.shape === "rect") {
-    const radians = (table.rotation * Math.PI) / 180;
-    const cos = Math.abs(Math.cos(radians));
-    const sin = Math.abs(Math.sin(radians));
     halfWidth = (table.width * cos + table.height * sin) / 2;
     halfHeight = (table.width * sin + table.height * cos) / 2;
+  } else {
+    const a = table.width / 2;
+    const b = table.height / 2;
+    halfWidth = Math.hypot(a * cos, b * sin);
+    halfHeight = Math.hypot(a * sin, b * cos);
   }
 
   return {

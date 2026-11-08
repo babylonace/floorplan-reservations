@@ -26,7 +26,9 @@ create table zones (
   sort_order integer not null default 0,
   width integer not null check (width > 0),
   height integer not null check (height > 0),
-  unique (venue_id, name)
+  unique (venue_id, name),
+  -- Lets child rows point at (zone, venue) together, so they can never mix venues.
+  unique (id, venue_id)
 );
 
 create type table_shape as enum ('rect', 'round');
@@ -34,7 +36,10 @@ create type table_shape as enum ('rect', 'round');
 -- "tables" is a confusing name in SQL, so these are dining_tables.
 create table dining_tables (
   id uuid primary key default gen_random_uuid(),
-  zone_id uuid not null references zones (id) on delete cascade,
+  -- venue_id repeats the zone's venue so reservation_tables can check that a reservation
+  -- and its tables belong to the same venue. The foreign key below keeps the two in step.
+  venue_id uuid not null,
+  zone_id uuid not null,
   label text not null check (length(trim(label)) > 0),
   min_seats smallint not null check (min_seats >= 1),
   max_seats smallint not null,
@@ -49,7 +54,9 @@ create table dining_tables (
   -- false for tables staff keep for walk-ins or that are out of use.
   bookable boolean not null default true,
   unique (zone_id, label),
-  check (max_seats >= min_seats)
+  unique (id, venue_id),
+  check (max_seats >= min_seats),
+  foreign key (zone_id, venue_id) references zones (id, venue_id) on delete cascade on update cascade
 );
 
 create type reservation_status as enum (
@@ -76,17 +83,36 @@ create table reservations (
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  unique (id, venue_id),
   check (ends_at > starts_at),
   check (guest_email is not null or guest_phone is not null)
 );
 
+create function set_updated_at() returns trigger
+language plpgsql as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+create trigger reservations_set_updated_at
+  before update on reservations
+  for each row execute function set_updated_at();
+
 create index reservations_venue_starts_at_idx on reservations (venue_id, starts_at);
 
 -- One reservation can take several tables pushed together.
+-- Both foreign keys include venue_id, so a reservation can only take tables of its own venue.
 create table reservation_tables (
-  reservation_id uuid not null references reservations (id) on delete cascade,
-  table_id uuid not null references dining_tables (id) on delete restrict,
-  primary key (reservation_id, table_id)
+  reservation_id uuid not null,
+  table_id uuid not null,
+  venue_id uuid not null,
+  primary key (reservation_id, table_id),
+  foreign key (reservation_id, venue_id) references reservations (id, venue_id) on delete cascade,
+  -- "no action" (not "restrict") so a booked table cannot be deleted on its own, while
+  -- deleting a whole venue still works: the check waits until all cascades have run.
+  foreign key (table_id, venue_id) references dining_tables (id, venue_id) on delete no action
 );
 
 create index reservation_tables_table_id_idx on reservation_tables (table_id);

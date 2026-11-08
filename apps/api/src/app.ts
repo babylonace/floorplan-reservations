@@ -12,6 +12,17 @@ export interface AppOptions {
 export async function buildApp({ pool, logger = false }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger });
 
+  // Server errors are logged in full but answered with a generic message, so database
+  // details (hosts, table names) never reach the caller.
+  app.setErrorHandler((error: { statusCode?: number; message: string }, request, reply) => {
+    const statusCode = error.statusCode ?? 500;
+    if (statusCode >= 500) {
+      request.log.error(error, "Request failed");
+      return reply.code(500).send({ error: "Internal error" });
+    }
+    return reply.code(statusCode).send({ error: error.message });
+  });
+
   await app.register(swagger, {
     openapi: {
       openapi: "3.1.0",

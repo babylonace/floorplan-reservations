@@ -40,7 +40,8 @@ export async function runMigrations(pool: Pool, dir: URL = MIGRATIONS_DIR): Prom
         await client.query("insert into schema_migrations (name) values ($1)", [file]);
         await client.query("commit");
       } catch (error) {
-        await client.query("rollback");
+        // If the rollback fails too, the connection is dropped below; the migration error matters more.
+        await client.query("rollback").catch(() => undefined);
         throw new Error(`Migration ${file} failed`, { cause: error });
       }
       applied.push(file);

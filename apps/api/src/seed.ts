@@ -11,10 +11,11 @@ export async function runSeed(pool: Pool, file: URL = SAMPLE_SEED_FILE): Promise
     await client.query("begin");
     await client.query(sql);
     await client.query("commit");
-  } catch (error) {
-    await client.query("rollback");
-    throw error;
-  } finally {
     client.release();
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    // A connection in an unknown state is thrown away instead of going back to the pool.
+    client.release(true);
+    throw error;
   }
 }

@@ -81,10 +81,10 @@ describe("GET /venues/:slug/floor-plan", () => {
         [venue.rows[0]?.id],
       );
       const tables = await client.query<{ id: string }>(
-        `insert into dining_tables (zone_id, label, min_seats, max_seats, x, y, width, height)
-         values ($1, 'A', 2, 4, 100, 100, 80, 80), ($1, 'B', 2, 4, 140, 100, 80, 80)
+        `insert into dining_tables (venue_id, zone_id, label, min_seats, max_seats, x, y, width, height)
+         values ($1, $2, 'A', 2, 4, 100, 100, 80, 80), ($1, $2, 'B', 2, 4, 140, 100, 80, 80)
          returning id`,
-        [zone.rows[0]?.id],
+        [venue.rows[0]?.id, zone.rows[0]?.id],
       );
       await client.query("commit");
 
@@ -96,6 +96,24 @@ describe("GET /venues/:slug/floor-plan", () => {
     } finally {
       await client.query("delete from venues where slug = 'crowded'");
       client.release();
+    }
+  });
+
+  it("hides database details when something breaks", async () => {
+    const deadPool = createPool("postgres://nobody@127.0.0.1:1/nothing_test", {
+      connectionTimeoutMillis: 1000,
+    });
+    const deadApp = await buildApp({ pool: deadPool });
+    try {
+      const response = await deadApp.inject({
+        method: "GET",
+        url: "/venues/sample-bistro/floor-plan",
+      });
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({ error: "Internal error" });
+    } finally {
+      await deadApp.close();
+      await deadPool.end();
     }
   });
 

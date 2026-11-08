@@ -66,7 +66,7 @@ npm run dev
 npm run check
 ```
 
-That runs Prettier, ESLint, the TypeScript compiler and the tests. The API tests need a real PostgreSQL database: set `TEST_DATABASE_URL` in `.env`. **The tests wipe that database**, so they refuse to run unless its name ends in `_test`. With Docker Compose, a `floorplan_test` database is created for you.
+That runs Prettier, ESLint, the TypeScript compiler and the tests. The API tests need a real PostgreSQL database: set `TEST_DATABASE_URL` in `.env`. **The tests wipe that database**, so they refuse to run unless its name ends in `_test`. With Docker Compose, a `floorplan_test` database is created the first time the database volume is made. If your volume is older than that, create it with `docker compose exec db createdb -U floorplan -O floorplan floorplan_test`.
 
 CI runs the same checks on every pull request against PostgreSQL 18, and also builds the Docker image, starts it with Compose and calls the API.
 

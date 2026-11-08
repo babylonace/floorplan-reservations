@@ -45,7 +45,15 @@ describe("boundingBox", () => {
     const box = boundingBox(
       table({ id: "t1", shape: "round", width: 90, height: 90, rotation: 45 }),
     );
-    expect(box.right - box.left).toBe(90);
+    expect(box.right - box.left).toBeCloseTo(90);
+  });
+
+  it("turns an oval table on its side at 90 degrees", () => {
+    const box = boundingBox(
+      table({ id: "t1", shape: "round", width: 200, height: 100, rotation: 90 }),
+    );
+    expect(box.right - box.left).toBeCloseTo(100);
+    expect(box.bottom - box.top).toBeCloseTo(200);
   });
 });
 
