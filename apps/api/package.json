@@ -1,0 +1,20 @@
+{
+  "name": "@floorplan-reservations/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HTTP API on top of PostgreSQL.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts"
+  },
+  "dependencies": {
+    "@fastify/swagger": "^9.9.3",
+    "@floorplan-reservations/engine": "0.1.0",
+    "fastify": "^5.12.8",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
+  }
+}
