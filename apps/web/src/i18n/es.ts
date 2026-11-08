@@ -142,18 +142,20 @@ export const es: DeepPartial<Messages> = {
     zoomOut: "Alejar",
     zoomFit: "Ver todo el plano",
     shortcutsTitle: "Atajos de teclado",
-    shortcuts: [
+    viewShortcuts: [
       ["Tab", "siguiente mesa"],
+      ["+ / −", "acercar o alejar"],
+      ["0", "ver todo el plano"],
+      ["Ctrl + rueda", "acercar donde está el ratón"],
+      ["Arrastrar el suelo", "moverse con el zoom puesto"],
+    ],
+    shortcuts: [
       ["Flechas", "mover 5 cm"],
       ["Mayús + flechas", "mover 50 cm"],
       ["R / Mayús + R", "girar 15°"],
       ["Supr", "quitar la mesa"],
       ["Esc", "soltar"],
       ["Alt al arrastrar", "colocar libre, sin la cuadrícula de 5 cm"],
-      ["+ / −", "acercar o alejar"],
-      ["0", "ver todo el plano"],
-      ["Ctrl + rueda", "acercar donde está el ratón"],
-      ["Arrastrar el suelo", "moverse con el zoom puesto"],
     ],
   },
   issues: {

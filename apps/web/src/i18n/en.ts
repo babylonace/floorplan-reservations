@@ -159,18 +159,20 @@ export const en = {
     zoomOut: "Zoom out",
     zoomFit: "Show the whole plan",
     shortcutsTitle: "Keyboard shortcuts",
-    shortcuts: [
+    viewShortcuts: [
       ["Tab", "next table"],
+      ["+ / −", "zoom in or out"],
+      ["0", "show the whole plan"],
+      ["Ctrl + wheel", "zoom where the pointer is"],
+      ["Drag the floor", "move around, zoomed in"],
+    ] as [string, string][],
+    shortcuts: [
       ["Arrows", "move 5 cm"],
       ["Shift + arrows", "move 50 cm"],
       ["R / Shift + R", "turn 15°"],
       ["Delete", "remove the table"],
       ["Escape", "let go"],
       ["Alt while dragging", "place freely, without the 5 cm grid"],
-      ["+ / −", "zoom in or out"],
-      ["0", "show the whole plan"],
-      ["Ctrl + wheel", "zoom where the pointer is"],
-      ["Drag the floor", "move around, zoomed in"],
     ] as [string, string][],
   },
   issues: {

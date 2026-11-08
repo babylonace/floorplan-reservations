@@ -1,5 +1,5 @@
 import { expect, test, type CDPSession, type Locator, type Page } from "@playwright/test";
-import { OWNER } from "./database.js";
+import { OWNER, STAFF } from "./database.js";
 
 /**
  * Zooming the plan in and out, and moving around it, with the buttons, the keyboard, the mouse
@@ -7,10 +7,10 @@ import { OWNER } from "./database.js";
  * Nothing here is saved.
  */
 
-async function signIn(page: Page) {
+async function signIn(page: Page, account = OWNER) {
   await page.goto("/");
-  await page.getByLabel("Correo electrónico").fill(OWNER.email);
-  await page.getByLabel("Contraseña").fill(OWNER.password);
+  await page.getByLabel("Correo electrónico").fill(account.email);
+  await page.getByLabel("Contraseña").fill(account.password);
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByRole("button", { name: "Comedor" })).toBeVisible();
 }
@@ -97,6 +97,55 @@ test("zooms with the buttons and the keyboard, and a dragged table follows the m
   // The outline keeps its width on screen, so allow a pixel or two.
   expect(Math.abs((await box(top)).width - now / 2.25)).toBeLessThan(2);
   await expect(fit).toBeDisabled();
+});
+
+test("a table dragged to the edge of a zoomed-in plan stays under the pointer", async ({
+  page,
+}) => {
+  await signIn(page);
+  const zoomIn = page.getByRole("button", { name: "Acercar" });
+  await zoomIn.click();
+  await zoomIn.click();
+  const plan = await box(page.locator("[data-plan-canvas]"));
+  const top = tableButton(page, "3").locator(".table-top");
+  const other = tableButton(page, "4").locator(".table-top");
+  const otherBefore = await box(other);
+  const start = middle(await box(top));
+  const end = { x: plan.x + plan.width - 15, y: start.y };
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 12 });
+  // The plan did not slide away under the table: the table is where the pointer is.
+  expect(Math.abs(middle(await box(top)).x - end.x)).toBeLessThan(6);
+  await page.mouse.up();
+  const otherAfter = await box(other);
+  expect(Math.abs(otherAfter.x - otherBefore.x)).toBeLessThan(1);
+  expect(Math.abs(otherAfter.y - otherBefore.y)).toBeLessThan(1);
+});
+
+test("staff can move around a zoomed-in plan from a table too", async ({ page }) => {
+  await signIn(page, STAFF);
+  const top = tableButton(page, "1").locator(".table-top");
+  // Zoom in on table 1 itself, so it stays under the pointer.
+  const fitted = middle(await box(top));
+  await page.mouse.move(fitted.x, fitted.y);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -500);
+  await page.keyboard.up("Control");
+  await expect(page.getByRole("button", { name: "Ver todo el plano" })).toBeEnabled();
+  const before = await box(top);
+  const start = middle(before);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 80, start.y + 40, { steps: 6 });
+  await page.mouse.up();
+  const after = await box(top);
+  expect(after.x - before.x).toBeCloseTo(80, -1);
+  expect(after.y - before.y).toBeCloseTo(40, -1);
+  // Staff only see the shortcuts that apply to them.
+  await page.getByRole("button", { name: "Atajos de teclado" }).click();
+  await expect(page.getByText("ver todo el plano")).toBeVisible();
+  await expect(page.getByText("quitar la mesa")).toHaveCount(0);
 });
 
 test("zooms around the pointer with Ctrl and the mouse wheel", async ({ page }) => {
