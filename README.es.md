@@ -4,7 +4,7 @@ Reservas de mesa para restaurantes: el local dibuja su propio plano y el motor d
 
 [Read in English](README.md)
 
-> **Estado: en sus inicios.** La API acepta reservas, la base de datos rechaza las reservas dobles y los propietarios dibujan su plano en un editor en el navegador. Las reservas públicas respetan el horario, la antelación máxima y los límites por dirección. El personal entra con contraseña y solo los propietarios de un local pueden cambiar su plano. Todavía no hay página de reservas ni pantalla del personal. Mira la [hoja de ruta](#hoja-de-ruta).
+> **Estado: en sus inicios.** La API acepta reservas, la base de datos rechaza las reservas dobles y los propietarios dibujan su plano en un editor en el navegador. Las reservas públicas respetan el horario, la antelación máxima y los límites por dirección. El personal entra con contraseña y solo los propietarios de un local pueden cambiar su plano. Los clientes reservan en una página pública en español, inglés o árabe. Todavía no hay pantalla del personal con las reservas del día. Mira la [hoja de ruta](#hoja-de-ruta).
 
 ![El editor del plano: un comedor dibujado a escala sobre un tapete de corte verde, con la mesa 3 elegida; el plano ocupa la derecha de la ventana y una columna a la izquierda tiene el local y la cuenta, los botones de añadir, los datos de la mesa 3 y, abajo, Guardar, Descartar y Borrar zona; el idioma y cerrar sesión están arriba a la derecha](docs/images/editor.png)
 
@@ -29,15 +29,17 @@ Fuera de alcance: comandas, pantallas de cocina, TPV.
   - `seatingOptions` dice dónde podría sentarse un grupo, de mejor a peor: la mesa más pequeña en la que cabe y, si no hay, mesas vecinas juntas.
   - `canStillSeat` dice si las mesas que ya tiene un grupo le siguen dando sitio después de cambiar el plano.
   - `acceptsArrival` dice si un cliente puede llegar en una fecha y hora locales, según el horario semanal y los días especiales.
+  - `arrivalTimes` da las horas que un cliente puede elegir un día, cada 15 minutos, también en franjas que pasan de medianoche.
 - `apps/api`: una API con [Fastify](https://fastify.dev/) en TypeScript.
   - `GET /venues/:slug/floor-plan` devuelve las zonas y las mesas, más los problemas que el motor encuentra en el plano.
-  - `POST /venues/:slug/reservations` reserva mesa. El motor elige la mesa (o mesas) y cuánto tiempo se guarda depende del tamaño del grupo. Responde `409` si no queda nada libre. Mira [límites de las reservas públicas](#límites-de-las-reservas-públicas).
+  - `POST /venues/:slug/reservations` reserva mesa. El motor elige la mesa (o mesas) y cuánto tiempo se guarda depende del tamaño del grupo. Responde `409` si no queda nada libre. Con `zoneId` solo prueba esa zona y responde `409` con el código `zone_full` si está llena. Mira [límites de las reservas públicas](#límites-de-las-reservas-públicas).
   - `GET` y `PUT /venues/:slug/booking-rules` leen y sustituyen con cuánta antelación se puede reservar y el horario de apertura.
+  - `GET /venues/:slug/booking-options` y `GET /venues/:slug/availability?date=&partySize=` alimentan la [página de reserva](#la-página-de-reserva): el nombre y los idiomas del local, las zonas que el cliente puede pedir y qué horas de un día tienen mesa libre.
   - Edición del plano: `POST /venues/:slug/zones`, `PATCH` y `DELETE /venues/:slug/zones/:zoneId`, `POST /venues/:slug/zones/:zoneId/tables`, `PATCH` y `DELETE /venues/:slug/tables/:tableId`. Mira [editar el plano](#editar-el-plano).
   - Inicio de sesión del personal: `POST /auth/login`, `POST /auth/logout` y `GET /auth/me`. Mira [cuentas del personal e inicio de sesión](#cuentas-del-personal-e-inicio-de-sesión).
   - `GET /health` comprueba que la API llega a la base de datos.
   - `GET /openapi.json` describe la API (OpenAPI 3.1).
-- `apps/web`: el [editor del plano](#el-editor-del-plano) para el personal, en React y TypeScript, construido con Vite. La API lo sirve en `/`.
+- `apps/web`: el [editor del plano](#el-editor-del-plano) para el personal y la [página de reserva](#la-página-de-reserva) para los clientes, en React y TypeScript, construidos con Vite como dos páginas. La API sirve el editor en `/` y la página de reserva en `/reservar/<local>`.
 - `npm run staff`: la línea de comandos que crea el primer propietario y gestiona las cuentas del personal.
 - `db/migrations`: el esquema, en archivos SQL normales. Un pequeño programa los aplica en orden, cada uno en su transacción y con un bloqueo para que dos copias de la app no migren a la vez.
 - `db/seed/sample.sql`: un local inventado para probar.
@@ -124,7 +126,7 @@ Los clientes reservan sin cuenta. El personal entra con su email y una contrase�
 
 ## Editar el plano
 
-Los propietarios de un local pueden crear, cambiar y quitar sus zonas y mesas con la API: posición, tamaño, forma, giro, estilo, zona y si la mesa se puede reservar por internet.
+Los propietarios de un local pueden crear, cambiar y quitar sus zonas y mesas con la API: posición, tamaño, forma, giro, estilo, zona y si la mesa se puede reservar por internet. Cada zona dice además si los clientes pueden pedirla en la página de reserva (`guestSelectable`, activado por defecto); una zona que no se puede pedir, como un reservado, puede tocarle igualmente a quien no tenga preferencia.
 
 - Cada cambio se comprueba con `validateZone` contra lo que hay guardado. Si una mesa fuera a pisar otra, salirse de su zona o tener asientos imposibles, se rechaza con `422` y la lista de problemas. Los problemas que el plano ya tenía no bloquean cambios que no tienen que ver.
 - Ningún cambio deja sin sitio a una reserva futura. Quitarle asientos que necesita, separar las mesas que tiene juntas, hacer redonda una de ellas o llevar una a otra zona se rechaza con `409`. Una mesa reservada sola sí se puede mover, incluso a otra zona: el grupo la conserva.
@@ -193,17 +195,32 @@ Para reservar no hace falta cuenta, así que la ruta se protege sola:
 
 - **Horario de apertura.** Cada local guarda franjas de llegada: la primera y la última hora a la que puede llegar un cliente, en la zona horaria del local, así que las 20:00 siguen siendo las 20:00 cuando cambia la hora. Las franjas se repiten cada semana; una franja puede pasar de medianoche (de 20:00 a 00:30). Los **días especiales** (un festivo, una semana de vacaciones, la cena de Nochevieja) sustituyen el horario semanal de esa fecha; un día especial sin franjas está cerrado. Las reservas fuera de horario reciben `422`. La hora de llegada cuenta por minutos: las 15:30:45 cuentan como las 15:30. Un local que no ha puesto horario no acepta reservas por internet.
 - **Antelación máxima.** Se puede reservar desde hoy hasta `horizonDays` días después (60 por defecto, 730 como máximo), contando los días del calendario del local. Más allá recibe `422`.
-- **Una reserva por cliente a la vez.** Una segunda reserva en el mismo local con el mismo email (da igual mayúsculas o minúsculas) o el mismo teléfono (da igual cómo se escriba) que se pise con otra que ya tiene recibe `409`. Así se para el doble clic en "Reservar" y que una persona se quede varias mesas para la misma noche. Los clics simultáneos hacen cola por cliente, así que pasa exactamente uno. Solo coinciden el mismo email o los mismos dígitos del teléfono: si alguien reserva una vez con email y otra solo con teléfono, o pone el prefijo del país una vez y la otra no, no se detecta. Los datos de contacto todavía no se verifican, así que quien conozca el email de otra persona puede reservar con él antes; la confirmación por email llega con la página de reserva.
+- **Una reserva por cliente a la vez.** Una segunda reserva en el mismo local con el mismo email (da igual mayúsculas o minúsculas) o el mismo teléfono (da igual cómo se escriba) que se pise con otra que ya tiene recibe `409`. Así se para el doble clic en "Reservar" y que una persona se quede varias mesas para la misma noche. Los clics simultáneos hacen cola por cliente, así que pasa exactamente uno. Solo coinciden el mismo email o los mismos dígitos del teléfono: si alguien reserva una vez con email y otra solo con teléfono, o pone el prefijo del país una vez y la otra no, no se detecta. Los datos de contacto todavía no se verifican, así que quien conozca el email de otra persona puede reservar con él antes; la confirmación por email llegará con la pantalla del personal y sus avisos.
+- **Disponibilidad.** `GET /venues/:slug/availability` admite 300 peticiones por dirección cada 15 minutos, de sobra para quien prueba muchos días. Una hora libre es una pista, no una promesa: alguien puede reservarla antes, y lo que decide es la reserva.
 - **Peticiones por dirección.** Cada dirección puede mandar 10 peticiones de reserva cada 15 minutos (se cambia con `BOOKING_RATE_LIMIT_MAX` y `BOOKING_RATE_LIMIT_WINDOW_MINUTES`); después recibe `429` con `Retry-After`. Las peticiones fallidas también cuentan. Un bloque IPv6 `/64` cuenta como una sola dirección. La cuenta vive en la memoria de la API: cada copia de la API cuenta por su lado y al reiniciarla empieza de cero. Los clientes que salen por una misma dirección (una operadora móvil, el wifi del propio local) comparten un límite. Todavía no hay un tope por local.
 - **Detrás de un proxy**, pon en `TRUST_PROXY` la dirección del proxy (por ejemplo `127.0.0.1`). Si no, todos los clientes parecen el proxy y comparten un solo límite. `X-Forwarded-For` solo se cree si viene de las direcciones de esa lista. Con Docker Compose la API ve al proxy a través de la red de Docker (una dirección como `172.17.0.1`), no como `127.0.0.1`: pon esa dirección o ese rango.
 
 Los propietarios cambian las reglas con `PUT /venues/:slug/booking-rules`, que las sustituye todas a la vez. Las reservas ya hechas se mantienen aunque ahora queden fuera de horario.
 
+## La página de reserva
+
+![La página de reserva del local inventado Sample Bistro, en español: personas y zona (Terraza) arriba, un calendario del mes con los días cerrados en gris, las horas de la comida como botones con las 13:00 elegidas, y un recuadro amarillo que dice que la terraza está completa a las 13:00 y propone 14:30, 14:45 y 15:00 en la terraza o el Comedor a las 13:00.](docs/images/booking.png)
+
+Los clientes reservan en `/reservar/<local>`, sin cuenta:
+
+- **Personas, zona, día y hora.** La lista de zonas solo enseña las que el local deja pedir, más «Sin preferencia»; con una zona o ninguna no aparece. El calendario solo deja elegir días dentro de la antelación y con horario, y las horas vienen de la API: las completas salen tachadas y no se pueden elegir.
+- **Si la zona está llena**, la página lo dice y propone las horas más cercanas con sitio en esa zona y las otras zonas con sitio a la misma hora. Un clic elige cualquiera. La reserva solo prueba esa zona, así que quien pidió terraza nunca acaba dentro sin que se le pregunte.
+- **Solo lo que la reserva necesita** (minimización de datos del RGPD): un nombre, un correo o un teléfono (basta con uno) y una nota opcional. Un aviso corto bajo el formulario dice que el local usa los datos solo para esta reserva, nunca para publicidad, y que se puede pedir verlos, corregirlos o borrarlos.
+- **Español, inglés y árabe**, a elegir arriba y recordado en el dispositivo. El árabe se lee de derecha a izquierda: la página, el calendario y sus flechas lo siguen. La reserva guarda el idioma del cliente si el local lo ofrece, para los mensajes posteriores.
+- **Accesible y pensada para el móvil.** El calendario es una rejilla de botones con flechas; los días cerrados y las horas completas se siguen leyendo. Los errores salen junto a su campo y el primero recibe el foco. Las etiquetas son cortas; las explicaciones largas las lee el lector de pantalla. Los botones miden 28 px con ratón y 44 px en el móvil, y nada depende de pasar el ratón por encima.
+
+![La misma página en un móvil, en árabe: todo se lee desde la derecha, con el nombre del local a la derecha, la columna del lunes del calendario a la derecha y las 13:00 elegidas a la derecha de la primera fila de horas.](docs/images/booking-phone-ar.png)
+
 ## Hoja de ruta
 
 1. ~~**Motor de reservas sin reservas dobles.**~~ Hecho.
 2. ~~**Editor del plano.** API para editar zonas y mesas, comprobada por el motor, y la pantalla para dibujarlas.~~ Hecho.
-3. **Página pública de reserva.** Varios idiomas (también de derecha a izquierda), propone horas cercanas cuando la pedida está llena, pensada para cumplir el RGPD.
+3. ~~**Página pública de reserva.** Varios idiomas (también de derecha a izquierda), propone horas cercanas cuando la pedida está llena, pensada para cumplir el RGPD.~~ Hecho.
 4. **Panel del local.** El servicio del día, confirmar, cancelar, sentar, avisos por email.
 5. **Guía de despliegue.** Copias de seguridad y uso en un local de verdad.
 
