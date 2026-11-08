@@ -74,6 +74,7 @@ describe("geometry", () => {
     expect(nextLabel([])).toBe("1");
     expect(nextLabel([{ label: "B1" }, { label: "b3" }, { label: "4" }], "B")).toBe("B4");
     expect(nextLabel([{ label: "1" }], "B")).toBe("B1");
+    expect(nextLabel([{ label: "B.1" }, { label: "Bx2" }], "B.")).toBe("B.2");
   });
 });
 

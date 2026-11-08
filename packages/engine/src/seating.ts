@@ -29,9 +29,10 @@ export interface SeatingRules {
   /**
    * Most stretches of bar (tables with seats on one side) that may be taken together in a row.
    * A bar is drawn in short stretches so that a couple does not block the whole bar; a group
-   * takes several stretches next to each other.
+   * takes several stretches next to each other. Optional, so rules written before bars existed
+   * still work: it then takes the default.
    */
-  maxBarStretchesJoined: number;
+  maxBarStretchesJoined?: number;
   /** Two tables can be pushed together when the gap between their edges is at most this many cm. */
   joinGap: number;
 }
@@ -116,12 +117,13 @@ function joinedGroups(tables: PlanTable[], rules: SeatingRules): PlanTable[][] {
   let frontier: PlanTable[][] = tables.map((table) => [table]);
 
   // Stretches of bar only join each other, so a group is all bar or no bar at all.
-  const largest = Math.max(rules.maxTablesJoined, rules.maxBarStretchesJoined);
+  const maxBar = rules.maxBarStretchesJoined ?? DEFAULT_SEATING_RULES.maxBarStretchesJoined ?? 6;
+  const largest = Math.max(rules.maxTablesJoined, maxBar);
   for (let size = 2; size <= largest; size++) {
     const next: PlanTable[][] = [];
     for (const group of frontier) {
       const bar = group[0] !== undefined && isOneSided(group[0]);
-      if (size > (bar ? rules.maxBarStretchesJoined : rules.maxTablesJoined)) continue;
+      if (size > (bar ? maxBar : rules.maxTablesJoined)) continue;
       for (const member of group) {
         for (const neighbour of neighbours.get(member.id) ?? []) {
           if (group.includes(neighbour)) continue;

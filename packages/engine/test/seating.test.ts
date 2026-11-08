@@ -122,6 +122,12 @@ describe("seatingOptions", () => {
     ).toEqual([]);
   });
 
+  it("still accepts rules written before bars existed", () => {
+    expect(
+      seatingOptions(4, [row], new Set(["big"]), { maxTablesJoined: 3, joinGap: 5 }),
+    ).toHaveLength(2);
+  });
+
   it("rejects a party size that is not a whole positive number", () => {
     expect(() => seatingOptions(0, [row])).toThrow(RangeError);
     expect(() => seatingOptions(2.5, [row])).toThrow(RangeError);

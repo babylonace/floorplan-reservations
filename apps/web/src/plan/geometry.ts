@@ -117,7 +117,8 @@ export function findFreeSpot(
  */
 export function nextLabel(tables: { label: string }[], prefix = ""): string {
   const used = new Set(tables.map((table) => table.label.trim().toLowerCase()));
-  const pattern = new RegExp(`^${prefix}(\\d+)$`, "i");
+  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^${escaped}(\\d+)$`, "i");
   const highest = Math.max(
     0,
     ...tables.map((table) => Number(pattern.exec(table.label.trim())?.[1] ?? 0)),

@@ -108,9 +108,9 @@ export const en = {
     sides: { top: "Top", right: "Right", bottom: "Bottom", left: "Left" },
     sidesLegend: "Sides with seats",
     sidesHint:
-      "Sides of the table before it is turned. A bar or a table against the wall has seats on one side. Tables are never pushed together along a side with seats.",
+      "Sides of the table before it is turned. A bar or a table against the wall has seats on one side. Tables are never pushed together along a side with seats, so with all four ticked this table is never joined to another; “All around” joins as usual. At least one side stays ticked.",
     barHint:
-      "Bar section: guests can book one section, and a group gets several sections next to each other in a line. Add more with “Add bar section” while this one is selected.",
+      "Bar section: guests can book one section, and a group gets several sections next to each other in a line. Add more with “Add bar section” while this one is selected. At least one side stays ticked.",
     bookable: "Can be booked online",
     bookableHint: "When unticked, the table stays on the plan but guests cannot book it online.",
     color: "Colour",

@@ -92,9 +92,9 @@ export const es: DeepPartial<Messages> = {
     sides: { top: "Arriba", right: "Derecha", bottom: "Abajo", left: "Izquierda" },
     sidesLegend: "Lados con asientos",
     sidesHint:
-      "Lados de la mesa sin girar. Una barra o una mesa contra la pared tiene asientos en un solo lado. Las mesas nunca se juntan por un lado con asientos.",
+      "Lados de la mesa sin girar. Una barra o una mesa contra la pared tiene asientos en un solo lado. Las mesas nunca se juntan por un lado con asientos, así que con los cuatro marcados esta mesa no se junta con ninguna; con «Alrededor» se junta como siempre. Al menos un lado queda marcado.",
     barHint:
-      "Tramo de barra: se puede reservar un tramo solo, y un grupo ocupa varios tramos seguidos, en línea. Añade más con «Añadir tramo de barra» mientras este está elegido.",
+      "Tramo de barra: se puede reservar un tramo solo, y un grupo ocupa varios tramos seguidos, en línea. Añade más con «Añadir tramo de barra» mientras este está elegido. Al menos un lado queda marcado.",
     bookable: "Se puede reservar por internet",
     bookableHint:
       "Si la desmarcas, la mesa sigue en el plano pero no se ofrece en las reservas por internet.",
