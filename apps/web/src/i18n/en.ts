@@ -79,6 +79,7 @@ export const en = {
     tablesCount: (n: number) => plural(n, "1 table", `${String(n)} tables`),
   },
   tables: {
+    addTitle: "Add table +",
     addRect: "Add rectangular table",
     addRound: "Add round table",
     /** On narrow screens, next to the shape; the full name above is what screen readers hear. */
