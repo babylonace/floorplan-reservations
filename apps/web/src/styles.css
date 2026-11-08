@@ -729,7 +729,7 @@ main.empty-state {
 }
 
 .zone-add {
-  margin-bottom: 0.2rem;
+  align-self: flex-end;
 }
 
 .read-only-note {
@@ -861,6 +861,17 @@ main.empty-state {
   border-bottom: 1px solid var(--line);
 }
 
+.add-tables-section {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.add-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
 .toolbar-group {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -870,6 +881,7 @@ main.empty-state {
 .toolbar-group .button {
   justify-content: center;
   padding-inline: 0.3rem;
+  font-size: 0.85rem;
 }
 
 .toolbar-group .button svg {
@@ -1207,6 +1219,18 @@ main.empty-state {
 
 .zone-form {
   margin-bottom: 0.5rem;
+}
+
+.zone-form .form-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.form-actions-row {
+  display: flex;
+  gap: 0.6rem;
 }
 
 /* Buttons that float in the top right corner of the plan. */

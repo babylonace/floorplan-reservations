@@ -2,7 +2,7 @@ import { useId, useState, type SubmitEvent } from "react";
 import type { Zone, ZoneFields } from "../api/types";
 import { useI18n } from "../i18n/i18n";
 import { MAX_CM } from "../plan/geometry";
-import { MetreField, NumberField } from "./ui";
+import { MetreField } from "./ui";
 
 /** The fields of a zone. Used to create one and to change the one on screen. */
 export function ZoneForm({
@@ -14,6 +14,7 @@ export function ZoneForm({
   onSubmit,
   onCancel,
   cancelLabel,
+  extraActions,
 }: {
   initial: ZoneFields;
   submitLabel: string;
@@ -23,6 +24,7 @@ export function ZoneForm({
   onSubmit: (fields: ZoneFields) => void;
   onCancel?: () => void;
   cancelLabel?: string;
+  extraActions?: React.ReactNode;
 }) {
   const { t } = useI18n();
   const ids = useId();
@@ -83,30 +85,22 @@ export function ZoneForm({
             }}
           />
         </div>
-        <NumberField
-          label={t.zones.sortOrder}
-          hint={t.zones.sortOrderHint}
-          value={fields.sortOrder}
-          min={-10_000}
-          max={10_000}
-          disabled={disabled}
-          onChange={(sortOrder) => {
-            setFields({ ...fields, sortOrder });
-          }}
-        />
         <div className="form-actions">
-          {onCancel && (
-            <button type="button" className="button" onClick={onCancel}>
-              {cancelLabel}
+          <div className="form-actions-row">
+            {onCancel && (
+              <button type="button" className="button" onClick={onCancel}>
+                {cancelLabel}
+              </button>
+            )}
+            <button
+              type="submit"
+              className="button button-primary"
+              disabled={busy || nameMissing || (!onCancel && !changed)}
+            >
+              {busy ? busyLabel : submitLabel}
             </button>
-          )}
-          <button
-            type="submit"
-            className="button button-primary"
-            disabled={busy || nameMissing || (!onCancel && !changed)}
-          >
-            {busy ? busyLabel : submitLabel}
-          </button>
+          </div>
+          {extraActions}
         </div>
       </fieldset>
     </form>
@@ -143,25 +137,30 @@ export function ZonePanel({
         </span>
       </div>
       {editable && (
-        <>
-          <ZoneForm
-            // A new form when the stored zone changes, so it starts from what was saved.
-            key={`${zone.id}:${zone.name}:${String(zone.width)}:${String(zone.height)}:${String(zone.sortOrder)}`}
-            initial={{
-              name: zone.name,
-              width: zone.width,
-              height: zone.height,
-              sortOrder: zone.sortOrder,
-            }}
-            submitLabel={t.zones.save}
-            busyLabel={t.zones.saving}
-            busy={busy}
-            onSubmit={onSave}
-          />
-          <button type="button" className="button button-danger-quiet" onClick={onDelete}>
-            {t.zones.remove}
-          </button>
-        </>
+        <ZoneForm
+          // A new form when the stored zone changes, so it starts from what was saved.
+          key={`${zone.id}:${zone.name}:${String(zone.width)}:${String(zone.height)}:${String(zone.sortOrder)}`}
+          initial={{
+            name: zone.name,
+            width: zone.width,
+            height: zone.height,
+            sortOrder: zone.sortOrder,
+          }}
+          submitLabel={t.zones.save}
+          busyLabel={t.zones.saving}
+          busy={busy}
+          onSubmit={onSave}
+          extraActions={
+            <button
+              type="button"
+              className="button button-danger-quiet"
+              disabled={busy}
+              onClick={onDelete}
+            >
+              {t.zones.remove}
+            </button>
+          }
+        />
       )}
     </section>
   );

@@ -65,6 +65,7 @@ export const es: DeepPartial<Messages> = {
     tablesCount: (n: number) => plural(n, "1 mesa", `${String(n)} mesas`),
   },
   tables: {
+    addTitle: "Añadir mesa +",
     addRect: "Añadir mesa rectangular",
     addRound: "Añadir mesa redonda",
     addRectShort: "Rectangular",

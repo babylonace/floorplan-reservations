@@ -278,51 +278,54 @@ export function Editor({
     <>
       <div className="toolbar" role="toolbar" aria-label={t.plan.toolbar}>
         {editable && (
-          <div className="toolbar-group">
-            <button
-              type="button"
-              className="button tool-button"
-              disabled={!canEdit}
-              onClick={() => {
-                add("rect");
-              }}
-            >
-              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                <rect x="1.5" y="6" width="11" height="8" rx="1.5" />
-                <path d="M16 6v6M13 9h6" />
-              </svg>
-              <ButtonLabel full={t.tables.addRect} short={t.tables.addRectShort} />
-            </button>
-            <button
-              type="button"
-              className="button tool-button"
-              disabled={!canEdit}
-              onClick={() => {
-                add("round");
-              }}
-            >
-              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                <circle cx="7" cy="10" r="5.5" />
-                <path d="M16 6v6M13 9h6" />
-              </svg>
-              <ButtonLabel full={t.tables.addRound} short={t.tables.addRoundShort} />
-            </button>
-            <button
-              type="button"
-              className="button tool-button"
-              disabled={!canEdit}
-              onClick={() => {
-                add("bar");
-              }}
-            >
-              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                <rect x="1.5" y="5" width="11" height="5" rx="1" />
-                <circle cx="4.5" cy="13.5" r="1.5" />
-                <circle cx="9.5" cy="13.5" r="1.5" />
-                <path d="M16 6v6M13 9h6" />
-              </svg>
-              <ButtonLabel full={t.tables.addBar} short={t.tables.addBarShort} />
-            </button>
+          <div className="add-tables-section">
+            <div className="add-title">{t.tables.addTitle}</div>
+            <div className="toolbar-group">
+              <button
+                type="button"
+                className="button tool-button"
+                disabled={!canEdit}
+                onClick={() => {
+                  add("rect");
+                }}
+              >
+                <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                  <rect x="1.5" y="6" width="11" height="8" rx="1.5" />
+                  <path d="M16 6v6M13 9h6" />
+                </svg>
+                <ButtonLabel full={t.tables.addRect} short={t.tables.addRectShort} />
+              </button>
+              <button
+                type="button"
+                className="button tool-button"
+                disabled={!canEdit}
+                onClick={() => {
+                  add("round");
+                }}
+              >
+                <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                  <circle cx="7" cy="10" r="5.5" />
+                  <path d="M16 6v6M13 9h6" />
+                </svg>
+                <ButtonLabel full={t.tables.addRound} short={t.tables.addRoundShort} />
+              </button>
+              <button
+                type="button"
+                className="button tool-button"
+                disabled={!canEdit}
+                onClick={() => {
+                  add("bar");
+                }}
+              >
+                <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                  <rect x="1.5" y="5" width="11" height="5" rx="1" />
+                  <circle cx="4.5" cy="13.5" r="1.5" />
+                  <circle cx="9.5" cy="13.5" r="1.5" />
+                  <path d="M16 6v6M13 9h6" />
+                </svg>
+                <ButtonLabel full={t.tables.addBar} short={t.tables.addBarShort} />
+              </button>
+            </div>
           </div>
         )}
         <div className="toolbar-group toolbar-end">
