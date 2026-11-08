@@ -1,5 +1,6 @@
 import { isOneSided, type PlanIssue } from "@floorplan-reservations/engine";
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useContext, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { ApiError } from "../api/client";
 import { useApi } from "../api/context";
 import type { FloorPlan, PlanZone, Table, ZoneFields } from "../api/types";
@@ -22,7 +23,7 @@ import { findFreeSpot, nextInLine, nextLabel } from "../plan/geometry";
 import { saveChanges } from "../plan/save";
 import { PlanCanvas } from "./PlanCanvas";
 import { TableInspector } from "./TableInspector";
-import { ButtonLabel, ConfirmDialog, useNotice, type NoticeMessage } from "./ui";
+import { ButtonLabel, ConfirmDialog, SideSlotContext, useNotice, type NoticeMessage } from "./ui";
 import { ZonePanel } from "./ZonePanel";
 
 export interface EditorProps {
@@ -66,6 +67,7 @@ export function Editor({
   onZoneDeleted,
 }: EditorProps) {
   const { t } = useI18n();
+  const sideSlot = useContext(SideSlotContext);
   const client = useApi();
   const [draft, setDraft] = useState<Draft>(() => draftFromZone(zone));
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -269,8 +271,10 @@ export function Editor({
     }
   }
 
-  return (
-    <div className="editor">
+  // The tools and the panel go in the left column, beside the plan; on their own (tests of the
+  // editor alone) they stay here.
+  const side = (
+    <>
       <div className="toolbar" role="toolbar" aria-label={t.plan.toolbar}>
         {editable && (
           <div className="toolbar-group">
@@ -364,83 +368,86 @@ export function Editor({
         </div>
       </div>
 
-      <div className="editor-body">
-        <div
-          className="canvas-wrap"
-          // On narrow screens the plan is as tall as the zone's shape needs, not a fixed share.
-          style={{ "--plan-ratio": String(planRatio(zone)) } as CSSProperties}
-        >
-          <PlanCanvas
-            zone={zone}
-            tables={draft.tables}
-            issues={issues}
-            selectedId={selectedId}
+      <aside className="side-panel" aria-label={t.zones.panelTitle}>
+        {selected ? (
+          <TableInspector
+            key={selected.id}
+            table={selected}
             editable={canEdit}
-            onSelect={setSelectedId}
-            onChange={change}
-            onRemove={remove}
-            onAnnounce={setAnnouncement}
-            tools={<ShortcutsButton editable={editable} />}
-            tableRef={(id, element) => {
-              if (element) tableElements.current.set(id, element);
-              else tableElements.current.delete(id);
+            problems={problemsOf(selected.id)}
+            onChange={(patch) => {
+              change(selected.id, patch);
+            }}
+            onRemove={() => {
+              remove(selected.id);
             }}
           />
-          {draft.tables.length === 0 && (
-            <p className="canvas-empty">{editable ? t.plan.empty : t.plan.emptyReadOnly}</p>
-          )}
-        </div>
+        ) : (
+          <ZonePanel
+            zone={zone}
+            tableCount={draft.tables.length}
+            editable={editable}
+            busy={busy}
+            onSave={(fields) => void saveZone(fields)}
+            onDelete={() => {
+              setConfirming("deleteZone");
+            }}
+          />
+        )}
 
-        <aside className="side-panel" aria-label={t.zones.panelTitle}>
-          {selected ? (
-            <TableInspector
-              key={selected.id}
-              table={selected}
-              editable={canEdit}
-              problems={problemsOf(selected.id)}
-              onChange={(patch) => {
-                change(selected.id, patch);
-              }}
-              onRemove={() => {
-                remove(selected.id);
-              }}
-            />
-          ) : (
-            <ZonePanel
-              zone={zone}
-              tableCount={draft.tables.length}
-              editable={editable}
-              busy={busy}
-              onSave={(fields) => void saveZone(fields)}
-              onDelete={() => {
-                setConfirming("deleteZone");
-              }}
-            />
-          )}
+        {issues.length > 0 && (
+          <section className="panel-section" aria-labelledby="issues-title">
+            <h2 id="issues-title">{t.issues.title}</h2>
+            <ul className="issue-list">
+              {issues.map((issue, index) => (
+                <li key={index}>
+                  <button
+                    type="button"
+                    className="link-button"
+                    aria-label={`${describeIssue(t, issue, labelOf)} ${t.issues.show(labelOf(issue.tableId))}`}
+                    onClick={() => {
+                      setSelectedId(issue.tableId);
+                      tableElements.current.get(issue.tableId)?.focus();
+                    }}
+                  >
+                    {describeIssue(t, issue, labelOf)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </aside>
+    </>
+  );
 
-          {issues.length > 0 && (
-            <section className="panel-section" aria-labelledby="issues-title">
-              <h2 id="issues-title">{t.issues.title}</h2>
-              <ul className="issue-list">
-                {issues.map((issue, index) => (
-                  <li key={index}>
-                    <button
-                      type="button"
-                      className="link-button"
-                      aria-label={`${describeIssue(t, issue, labelOf)} ${t.issues.show(labelOf(issue.tableId))}`}
-                      onClick={() => {
-                        setSelectedId(issue.tableId);
-                        tableElements.current.get(issue.tableId)?.focus();
-                      }}
-                    >
-                      {describeIssue(t, issue, labelOf)}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-        </aside>
+  return (
+    <div className="editor">
+      {sideSlot ? createPortal(side, sideSlot) : side}
+      <div
+        className="canvas-wrap"
+        // On narrow screens the plan is as tall as the zone's shape needs, not a fixed share.
+        style={{ "--plan-ratio": String(planRatio(zone)) } as CSSProperties}
+      >
+        <PlanCanvas
+          zone={zone}
+          tables={draft.tables}
+          issues={issues}
+          selectedId={selectedId}
+          editable={canEdit}
+          onSelect={setSelectedId}
+          onChange={change}
+          onRemove={remove}
+          onAnnounce={setAnnouncement}
+          tools={<ShortcutsButton editable={editable} />}
+          tableRef={(id, element) => {
+            if (element) tableElements.current.set(id, element);
+            else tableElements.current.delete(id);
+          }}
+        />
+        {draft.tables.length === 0 && (
+          <p className="canvas-empty">{editable ? t.plan.empty : t.plan.emptyReadOnly}</p>
+        )}
       </div>
 
       <p className="visually-hidden" role="status" aria-live="polite">
