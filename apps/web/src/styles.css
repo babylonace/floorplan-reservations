@@ -638,6 +638,7 @@ main.empty-state {
 }
 
 .venue-picker {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -650,6 +651,7 @@ main.empty-state {
 
 .venue-picker select {
   width: auto;
+  min-width: 0;
 }
 
 .venue-name {
@@ -748,7 +750,7 @@ main.empty-state {
 
 /*
  * Messages after an action float over the bottom of the plan, so nothing on the page moves when
- * one comes or goes. On wide screens they stay left of the side panel, clear of its buttons.
+ * one comes or goes. On wide screens they stay right of the side panel, clear of its buttons.
  */
 .notice-area {
   position: fixed;

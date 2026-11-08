@@ -62,8 +62,6 @@ export const en = {
     width: "Width (m)",
     height: "Depth (m)",
     sizeHint: "In metres; decimals are fine, such as 4.5.",
-    sortOrder: "Position in the list",
-    sortOrderHint: "Zones with lower numbers come first.",
     create: "Create zone",
     creating: "Creating…",
     created: (name: string) => `Zone “${name}” created.`,

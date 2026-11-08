@@ -50,7 +50,9 @@ function fieldsOf(zone: PlanZone): ZoneFields {
 /** Whether the typed name or size differ from the stored zone. */
 function zoneDiffers(fields: ZoneFields, zone: ZoneFields): boolean {
   return (
-    fields.name.trim() !== zone.name || fields.width !== zone.width || fields.height !== zone.height
+    fields.name.trim() !== zone.name.trim() ||
+    fields.width !== zone.width ||
+    fields.height !== zone.height
   );
 }
 

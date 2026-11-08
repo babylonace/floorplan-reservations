@@ -48,8 +48,6 @@ export const es: DeepPartial<Messages> = {
     width: "Ancho (m)",
     height: "Fondo (m)",
     sizeHint: "En metros; con decimales, como 4,5.",
-    sortOrder: "Orden en la lista",
-    sortOrderHint: "Las zonas con números más bajos salen antes.",
     create: "Crear zona",
     creating: "Creando…",
     created: (name: string) => `Zona «${name}» creada.`,
