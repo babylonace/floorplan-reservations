@@ -1,50 +1,15 @@
-import { validateZone, type TableShape } from "@floorplan-reservations/engine";
+import { validateZone } from "@floorplan-reservations/engine";
 import type { FastifyPluginAsync } from "fastify";
 import type { Pool } from "../db.js";
-
-const SLUG_PATTERN = "^[a-z0-9]+(-[a-z0-9]+)*$";
-
-const tableSchema = {
-  type: "object",
-  required: [
-    "id",
-    "label",
-    "minSeats",
-    "maxSeats",
-    "shape",
-    "x",
-    "y",
-    "width",
-    "height",
-    "rotation",
-    "style",
-    "bookable",
-  ],
-  properties: {
-    id: { type: "string", format: "uuid" },
-    label: { type: "string" },
-    minSeats: { type: "integer" },
-    maxSeats: { type: "integer" },
-    shape: { type: "string", enum: ["rect", "round"] },
-    x: { type: "integer", description: "Centre of the table, in cm from the zone's left edge." },
-    y: { type: "integer", description: "Centre of the table, in cm from the zone's top edge." },
-    width: { type: "integer" },
-    height: { type: "integer" },
-    rotation: { type: "integer", description: "Degrees, clockwise." },
-    style: { type: "object", additionalProperties: true },
-    bookable: { type: "boolean" },
-  },
-} as const;
-
-const issueSchema = {
-  type: "object",
-  required: ["code", "tableId"],
-  properties: {
-    code: { type: "string", enum: ["seats_invalid", "outside_zone", "overlap"] },
-    tableId: { type: "string" },
-    otherTableId: { type: "string" },
-  },
-} as const;
+import {
+  errorResponse,
+  issueSchema,
+  slugParam,
+  TABLE_COLUMNS,
+  tableSchema,
+  toApiTable,
+  type TableRow,
+} from "./shared.js";
 
 const floorPlanResponse = {
   type: "object",
@@ -65,10 +30,11 @@ const floorPlanResponse = {
       type: "array",
       items: {
         type: "object",
-        required: ["id", "name", "width", "height", "tables", "issues"],
+        required: ["id", "name", "sortOrder", "width", "height", "tables", "issues"],
         properties: {
           id: { type: "string", format: "uuid" },
           name: { type: "string" },
+          sortOrder: { type: "integer" },
           width: { type: "integer" },
           height: { type: "integer" },
           tables: { type: "array", items: tableSchema },
@@ -83,12 +49,6 @@ const floorPlanResponse = {
   },
 } as const;
 
-const errorResponse = {
-  type: "object",
-  required: ["error"],
-  properties: { error: { type: "string" } },
-} as const;
-
 interface VenueRow {
   id: string;
   slug: string;
@@ -101,24 +61,9 @@ interface VenueRow {
 interface ZoneRow {
   id: string;
   name: string;
+  sort_order: number;
   width: number;
   height: number;
-}
-
-interface TableRow {
-  id: string;
-  zone_id: string;
-  label: string;
-  min_seats: number;
-  max_seats: number;
-  shape: TableShape;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation: number;
-  style: Record<string, unknown>;
-  bookable: boolean;
 }
 
 export const floorPlanRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool }) => {
@@ -131,7 +76,7 @@ export const floorPlanRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool 
         params: {
           type: "object",
           required: ["slug"],
-          properties: { slug: { type: "string", pattern: SLUG_PATTERN, maxLength: 80 } },
+          properties: { slug: slugParam },
         },
         response: { 200: floorPlanResponse, 404: errorResponse },
       },
@@ -150,18 +95,16 @@ export const floorPlanRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool 
 
       const [zoneResult, tableResult] = await Promise.all([
         pool.query<ZoneRow>(
-          `select id, name, width, height
+          `select id, name, sort_order, width, height
              from zones
-            where venue_id = $1
+            where venue_id = $1 and retired_at is null
             order by sort_order, name`,
           [venue.id],
         ),
         pool.query<TableRow>(
-          `select t.id, t.zone_id, t.label, t.min_seats, t.max_seats, t.shape,
-                  t.x, t.y, t.width, t.height, t.rotation, t.style, t.bookable
+          `select ${TABLE_COLUMNS}
              from dining_tables t
-             join zones z on z.id = t.zone_id
-            where z.venue_id = $1
+            where t.venue_id = $1 and t.retired_at is null
             order by t.label`,
           [venue.id],
         ),
@@ -170,22 +113,15 @@ export const floorPlanRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool 
       const zones = zoneResult.rows.map((zone) => {
         const tables = tableResult.rows
           .filter((table) => table.zone_id === zone.id)
-          .map((table) => ({
-            id: table.id,
-            label: table.label,
-            minSeats: table.min_seats,
-            maxSeats: table.max_seats,
-            shape: table.shape,
-            x: table.x,
-            y: table.y,
-            width: table.width,
-            height: table.height,
-            rotation: table.rotation,
-            style: table.style,
-            bookable: table.bookable,
-          }));
+          .map(toApiTable);
+        const plan = { id: zone.id, name: zone.name, width: zone.width, height: zone.height };
         // The engine checks the plan as stored, so staff see problems as soon as they save.
-        return { ...zone, tables, issues: validateZone({ ...zone, tables }) };
+        return {
+          ...plan,
+          sortOrder: zone.sort_order,
+          tables,
+          issues: validateZone({ ...plan, tables }),
+        };
       });
 
       return {

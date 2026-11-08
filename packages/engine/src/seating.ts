@@ -145,3 +145,33 @@ export function seatingOptions(
     seats,
   }));
 }
+
+/**
+ * True when tables a party already holds can still seat it: together they have enough seats
+ * and, when there are several, they still stand side by side as one group.
+ *
+ * Used before staff change the plan, so an edit never leaves a booked party without room.
+ * It is looser than `seatingOptions`: minimum seats and the cap on joined tables only steer new
+ * bookings, they do not make an existing one impossible.
+ */
+export function canStillSeat(
+  partySize: number,
+  tables: readonly PlanTable[],
+  rules: SeatingRules = DEFAULT_SEATING_RULES,
+): boolean {
+  const [first] = tables;
+  if (!first || seatsOf([...tables]) < partySize) return false;
+
+  // Every table must be reachable from the first one through neighbours it can be pushed against.
+  const reached = new Set([first.id]);
+  const queue = [first];
+  for (let current = queue.pop(); current; current = queue.pop()) {
+    for (const other of tables) {
+      if (!reached.has(other.id) && canJoin(current, other, rules.joinGap)) {
+        reached.add(other.id);
+        queue.push(other);
+      }
+    }
+  }
+  return reached.size === tables.length;
+}

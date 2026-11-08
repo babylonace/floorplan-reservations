@@ -118,7 +118,7 @@ async function loadPlan(client: PoolClient, venueId: string): Promise<PlanZone[]
             t.label, t.min_seats, t.max_seats, t.shape, t.x, t.y, t.width, t.height, t.rotation
        from dining_tables t
        join zones z on z.id = t.zone_id
-      where t.venue_id = $1 and t.bookable
+      where t.venue_id = $1 and t.bookable and t.retired_at is null and z.retired_at is null
       order by z.sort_order, z.name, t.label`,
     [venueId],
   );
@@ -236,6 +236,21 @@ async function bookBestTables(
          select $1, table_id, $3 from unnest($2::uuid[]) as table_id`,
         [created.id, best.tableIds, venueId],
       );
+
+      // Staff may have changed these tables (fewer seats, not bookable, moved apart) after the
+      // plan above was read. Plan edits lock the tables they change, and the insert above had
+      // to wait for them, so reading the plan again now sees every edit that got in first.
+      const freshZone = (await loadPlan(client, venueId)).find((z) => z.id === best.zoneId);
+      const chosen = freshZone?.tables.filter((table) => best.tableIds.includes(table.id)) ?? [];
+      const stillOffered =
+        freshZone !== undefined &&
+        seatingOptions(body.partySize, [{ ...freshZone, tables: chosen }]).some(
+          (option) => option.tableIds.join() === best.tableIds.join(),
+        );
+      if (!stillOffered) {
+        await client.query("rollback to savepoint attempt");
+        continue;
+      }
       await client.query("release savepoint attempt");
 
       const zone = plan.find((candidate) => candidate.id === best.zoneId);

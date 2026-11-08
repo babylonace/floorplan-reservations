@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { canJoin, seatingOptions, type PlanTable, type PlanZone } from "../src/index.js";
+import {
+  canJoin,
+  canStillSeat,
+  seatingOptions,
+  type PlanTable,
+  type PlanZone,
+} from "../src/index.js";
 
 function table(overrides: Partial<PlanTable> & { id: string }): PlanTable {
   return {
@@ -115,5 +121,41 @@ describe("seatingOptions", () => {
   it("rejects a party size that is not a whole positive number", () => {
     expect(() => seatingOptions(0, [row])).toThrow(RangeError);
     expect(() => seatingOptions(2.5, [row])).toThrow(RangeError);
+  });
+});
+
+describe("canStillSeat", () => {
+  it("keeps a party at a table with enough seats", () => {
+    expect(canStillSeat(2, [table({ id: "a" })])).toBe(true);
+    expect(canStillSeat(3, [table({ id: "a" })])).toBe(false);
+  });
+
+  it("ignores the minimum seats, which only steers new bookings", () => {
+    expect(canStillSeat(1, [table({ id: "a", minSeats: 2, maxSeats: 4 })])).toBe(true);
+  });
+
+  it("keeps joined tables while they still stand side by side", () => {
+    const joined = [table({ id: "a", x: 100 }), table({ id: "b", x: 180 })];
+    expect(canStillSeat(4, joined)).toBe(true);
+  });
+
+  it("refuses joined tables once one is moved away or turned round", () => {
+    expect(canStillSeat(4, [table({ id: "a", x: 100 }), table({ id: "b", x: 400 })])).toBe(false);
+    expect(
+      canStillSeat(4, [table({ id: "a", x: 100 }), table({ id: "b", x: 180, shape: "round" })]),
+    ).toBe(false);
+  });
+
+  it("accepts a chain where the ends only meet through the middle table", () => {
+    const chain = [
+      table({ id: "a", x: 100 }),
+      table({ id: "c", x: 260 }),
+      table({ id: "b", x: 180 }),
+    ];
+    expect(canStillSeat(6, chain)).toBe(true);
+  });
+
+  it("refuses an empty list", () => {
+    expect(canStillSeat(1, [])).toBe(false);
   });
 });
