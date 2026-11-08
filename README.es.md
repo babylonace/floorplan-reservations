@@ -163,6 +163,8 @@ Una pantalla para que los propietarios del local dibujen sus salas. El personal 
 
 ![Una barra hecha con tres tramos, de B1 a B3, cada uno con dos taburetes redondos en su lado de abajo; el panel lateral de B3 muestra "Asientos: en algunos lados" con solo "Abajo" marcado alrededor de un dibujito de la mesa.](docs/images/editor-bar.png)
 
+![El plano acercado sobre las mesas 1 y 2: las sillas redondas y la cuadrícula se ven grandes, mientras que los nombres de las mesas, el anillo de selección y los botones del zoom (alejar, ver todo, acercar) de la esquina mantienen su tamaño.](docs/images/editor-zoom.png)
+
 ### Las cookies de sesión en desarrollo y en producción
 
 La cookie de sesión es `__Host-`, `Secure` y `SameSite=Strict`, y la API rechaza las peticiones que el navegador marca como venidas de otro sitio. Por eso el editor tiene que salir del **mismo origen** que la API:

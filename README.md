@@ -164,6 +164,8 @@ A screen for the venue's owners to draw their rooms. Staff can open it too, read
 
 ![A bar built from three sections, B1 to B3, each with two round stools along its bottom side; the side panel of B3, in Spanish, shows "Asientos: En algunos lados" with only "Abajo" (bottom) ticked around a small drawing of the table.](docs/images/editor-bar.png)
 
+![The plan zoomed in on tables 1 and 2, in Spanish: the round chairs and the grid are large, while the table names, the selection ring and the zoom buttons (zoom out, whole plan, zoom in) in the corner keep their usual size.](docs/images/editor-zoom.png)
+
 ### Sign-in cookies in development and in production
 
 The session cookie is `__Host-`, `Secure` and `SameSite=Strict`, and the API turns away requests a browser marks as coming from another site. So the editor must come from the **same origin** as the API:
