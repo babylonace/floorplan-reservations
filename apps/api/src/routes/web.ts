@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import fastifyStatic from "@fastify/static";
 import type { FastifyPluginAsync } from "fastify";
 
@@ -37,8 +37,10 @@ export function checkWebDir(dir: string): void {
 
 export const webRoutes: FastifyPluginAsync<{ dir: string }> = async (app, { dir }) => {
   checkWebDir(dir);
+  // A relative WEB_DIR counts from the folder the server was started in.
+  const root = resolve(dir);
   await app.register(fastifyStatic, {
-    root: dir,
+    root,
     // One route per file found at start-up, so nothing else under / is ever answered from disk.
     wildcard: false,
     index: ["index.html"],

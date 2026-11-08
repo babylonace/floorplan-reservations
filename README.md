@@ -4,7 +4,9 @@ Table reservations for restaurants, where the venue draws its own floor plan and
 
 [Leer en español](README.es.md)
 
-> **Status: early.** The API can take a booking, the database refuses double bookings, and owners can edit the floor plan through the API. Public bookings respect opening hours, a booking horizon and per-address limits. Staff sign in with a password, and only a venue's owners can change it. There is no drawing screen, booking page or staff screen yet. See the [roadmap](#roadmap).
+> **Status: early.** The API can take a booking, the database refuses double bookings, and owners draw their floor plan in a browser editor. Public bookings respect opening hours, a booking horizon and per-address limits. Staff sign in with a password, and only a venue's owners can change the plan. There is no booking page or staff screen yet. See the [roadmap](#roadmap).
+
+![The floor plan editor: a dining room drawn to scale on a green cutting mat, with table 3 selected and its details in the side panel](docs/images/editor.png)
 
 ## Why
 
@@ -35,6 +37,7 @@ Out of scope: orders, kitchen screens, point of sale.
   - Staff sign-in: `POST /auth/login`, `POST /auth/logout` and `GET /auth/me`. See [staff accounts and sign-in](#staff-accounts-and-sign-in).
   - `GET /health` checks that the API can reach the database.
   - `GET /openapi.json` describes the API (OpenAPI 3.1).
+- `apps/web`: the [floor plan editor](#the-floor-plan-editor) for staff, in React and TypeScript, built with Vite. The API serves it at `/`.
 - `npm run staff`: the command line that creates the first owner and manages staff accounts.
 - `db/migrations`: the schema, as plain SQL files. A small runner applies them in order, each in a transaction, behind a lock so two copies of the app can't migrate at the same time.
 - `db/seed/sample.sql`: a made-up venue to play with.
@@ -49,11 +52,11 @@ You need Docker with Compose.
 docker compose up --build
 ```
 
-Then load the sample venue and ask for its plan:
+Then load the sample venue, create an owner for it (it asks for a password) and open <http://127.0.0.1:3000> to sign in to the editor:
 
 ```bash
 docker compose exec api node apps/api/dist/seed-cli.js
-curl http://127.0.0.1:3000/venues/sample-bistro/floor-plan
+docker compose exec api node apps/api/dist/staff-cli.js add --venue sample-bistro --email you@example.com --role owner
 ```
 
 ### With Node and your own PostgreSQL
@@ -65,8 +68,12 @@ cp .env.example .env    # then edit the two database URLs
 npm install
 npm run db:migrate
 npm run db:seed
-npm run dev
+npm run staff -- add --venue sample-bistro --email you@example.com --role owner
+npm run dev       # the API on http://127.0.0.1:3000
+npm run dev:web   # the editor on http://127.0.0.1:5173, reloading as you change it
 ```
+
+`npm run build` builds the API and the editor; after that, the API serves the editor itself at <http://127.0.0.1:3000>.
 
 ## Tests and checks
 
@@ -76,7 +83,16 @@ npm run check
 
 That runs Prettier, ESLint, the TypeScript compiler and the tests. The API tests need a real PostgreSQL database: set `TEST_DATABASE_URL` in `.env`. **The tests wipe that database**, so they refuse to run unless its name ends in `_test`. With Docker Compose, a `floorplan_test` database is created the first time the database volume is made. If your volume is older than that, create it with `docker compose exec db createdb -U floorplan -O floorplan floorplan_test`.
 
-CI runs the same checks on every pull request against PostgreSQL 18, and also builds the Docker image, starts it with Compose and calls the API.
+The editor's tests (Vitest with Testing Library, in a simulated browser) run with the rest. The browser tests are separate, because they need a real browser:
+
+```bash
+npx -w @floorplan-reservations/web playwright install chromium   # once
+npm run e2e
+```
+
+They build everything, wipe the database in `E2E_DATABASE_URL` (its name must end in `_e2e`), load the sample venue with made-up accounts, start the real API and drive Chromium through it: signing in, moving tables with the keyboard and the mouse, turning and resizing them, the refusals from the API, zones, the read-only view for staff, an accessibility check with [axe](https://github.com/dequelabs/axe-core) and a check that the content security policy blocks nothing.
+
+CI runs the same checks on every pull request against PostgreSQL 18. The browser tests run in a job of their own. Another job builds the Docker image, starts it with Compose and calls the API and the editor.
 
 ## How the plan is stored
 
@@ -114,8 +130,31 @@ Owners of a venue can add, change and remove its zones and tables through the AP
 - Changes never leave an upcoming reservation without room. Taking away seats it needs, moving the tables it holds together apart, making one of them round or moving one of them to another zone is refused with `409`. A table booked on its own can still be moved, even to another zone: the party keeps it.
 - Marking a table as not bookable never breaks a booking: bookings already made keep it, new ones go elsewhere.
 - A venue can have up to 50 zones and a zone up to 200 tables.
+- Refusals carry a `code` next to the English `error` sentence (`plan_invalid`, `upcoming_reservations`, `reservations_without_room`, `duplicate_label`, `duplicate_name`, `limit_reached`, `changed_while_saving`, `not_found`) and, for bookings in the way, a `count`. The editor turns them into its own language.
 - A table with an upcoming reservation can't be removed. A table that was only booked in the past is **retired** instead of deleted: it leaves the plan and the engine, and old reservations still point at it. Its label is free again. Removing a zone works the same way for all its tables.
 - Edits to the same zone take turns (they lock the zone, then the tables). A booking that had to wait for an edit of its tables reads the plan again before it is saved, so it can't land on a table that just lost its seats or stopped being bookable.
+
+## The floor plan editor
+
+![The same room in English, with two tables on top of each other: both are hatched in red and the side panel says "Tables 3 and 4 overlap."](docs/images/editor-problem-en.png)
+
+A screen for the venue's owners to draw their rooms. Staff can open it too, read-only.
+
+- **Drawn to scale** in SVG, one unit per centimetre, with the room's measurements along its edges and a scale bar. Tables show their seats as chairs around them.
+- **Mouse:** drag a table to move it (it snaps to 5 cm; hold Alt to place it freely), the round handle turns it in 15° steps, the square handle resizes it from its centre.
+- **Keyboard:** Tab goes from table to table, the arrows move the selected one by 5 cm (50 cm with Shift), R turns it, Delete removes it, Escape lets go. Every table has a full name for screen readers ("Table 3, round, for 2 to 4, 500 cm from the left…"), and moves are announced.
+- **The side panel** edits everything the API stores: name, shape, seats, size, position, turn, colour and whether it can be booked online. With no table selected, it edits the zone. Zones are created, renamed, resized and deleted from there too.
+- **Problems show as you work.** The editor runs the same `validateZone` as the API on every change: overlapping tables are hatched in red, with the exact area where they meet, and listed with a link to each table.
+- **Nothing is saved until you press Save.** Saving sends only what changed, one table at a time. If the API refuses something (a table with an upcoming booking, a move that would leave a party without room), the message says which table and why, in the editor's language, and that change stays on screen to fix. A table that cannot be removed goes back on the plan. Moves that only fail because another table hasn't moved out of the way yet are tried again after the others. The browser asks before you leave with unsaved changes.
+- **Languages:** Spanish first, English as the fallback for anything not translated. Every text lives in `apps/web/src/i18n`; a lint rule refuses words written straight into the components, and a test checks Spanish has every English text.
+- **Accessibility:** visible keyboard focus, labels on every field, colours checked for contrast (table names pick dark or white text to stay above 4.5:1), and the browser tests run axe on the sign-in page and the editor.
+
+### Sign-in cookies in development and in production
+
+The session cookie is `__Host-`, `Secure` and `SameSite=Strict`, and the API turns away requests a browser marks as coming from another site. So the editor must come from the **same origin** as the API:
+
+- **In production** the API serves the built editor itself (`apps/web/dist`, or the folder in `WEB_DIR`), so there is one address and nothing to configure: no CORS, no relaxed cookie. The pages get a strict content security policy (only files from the same address, no inline scripts, no framing). The Docker image includes the editor.
+- **In development** Vite serves the editor on port 5173 and passes `/auth`, `/venues` and `/health` on to the API (`API_URL`, `http://127.0.0.1:3000` by default). The browser only ever talks to Vite, so to it the cookie is same-origin as well. Browsers accept `Secure` cookies on `http://localhost` and `http://127.0.0.1`, so this works without HTTPS.
 
 ## How double bookings are stopped
 
@@ -144,14 +183,14 @@ Owners set the rules with `PUT /venues/:slug/booking-rules`, which replaces them
 ## Roadmap
 
 1. ~~**Booking engine with no double bookings.**~~ Done.
-2. **Floor plan editor.** ~~API to edit zones and tables, checked by the engine.~~ Done. The screen to draw them comes with the staff screen.
+2. ~~**Floor plan editor.** API to edit zones and tables, checked by the engine, and the screen to draw them.~~ Done.
 3. **Public booking page.** Several languages (including right-to-left), suggests nearby times when the one asked for is full, GDPR-friendly.
 4. **Staff screen.** Today's service, confirm, cancel, seat, email notices.
 5. **Deployment guide.** Backups and running it for a real venue.
 
 ## Stack
 
-Node 24, TypeScript, Fastify, PostgreSQL 18, Vitest, ESLint, Prettier, Docker Compose, GitHub Actions.
+Node 24, TypeScript, Fastify, PostgreSQL 18, React 19, Vite, Vitest with Testing Library, Playwright with axe, ESLint, Prettier, Docker Compose, GitHub Actions.
 
 ## License
 

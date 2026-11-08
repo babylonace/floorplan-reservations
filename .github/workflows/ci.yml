@@ -49,6 +49,50 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  # The editor in a real browser, against the API and a real PostgreSQL. A job of its own: it
+  # downloads a browser at run time, and a failure here is easy to tell apart from the checks.
+  e2e:
+    name: Browser tests (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18-alpine@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395
+        env:
+          POSTGRES_USER: floorplan
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: floorplan_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U floorplan -d floorplan_e2e"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      E2E_DATABASE_URL: postgres://floorplan:ci-only-password@localhost:5432/floorplan_e2e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # The browser that matches the Playwright version in package-lock.json.
+      - run: npx -w @floorplan-reservations/web playwright install --with-deps chromium
+      - run: npm run e2e
+      - name: Keep the report when something failed
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7
+
   compose:
     name: Docker Compose starts and answers
     runs-on: ubuntu-latest
@@ -67,6 +111,9 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:3000/venues/sample-bistro/floor-plan \
             | jq --exit-status '.zones | length == 2'
           curl --fail --silent --show-error --output /dev/null http://127.0.0.1:3000/openapi.json
+          curl --fail --silent --show-error http://127.0.0.1:3000/ | grep --quiet '<div id="root">'
+          curl --fail --silent --show-error --head http://127.0.0.1:3000/ \
+            | grep --quiet --ignore-case "^content-security-policy: default-src 'self'"
       - name: Show logs
         if: failure()
         run: docker compose logs
