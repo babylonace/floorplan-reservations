@@ -531,21 +531,94 @@ fieldset {
 
 /* Signed in */
 
-/* The plan keeps the height of the window; only the side panel scrolls. */
+/*
+ * The plan on the right, as tall as the window, with only the zone tabs above it. Everything else
+ * is in a column on the left: the venue, the editor's tools and panel (which scroll), and the
+ * language and account at the bottom.
+ */
 .workspace {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-columns: var(--panel-width) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "top main"
+    "side main"
+    "foot main";
   height: 100dvh;
 }
 
-.app-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem 1rem;
-  padding: 0.25rem 0.75rem;
+.side-slot {
+  grid-area: side;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* The message of a page with no venue sits where the plan would. */
+main.empty-state {
+  grid-area: main;
+}
+
+/* A link to jump past the tools to the plan, shown only when the keyboard reaches it. */
+.skip-link {
+  position: absolute;
+  inset-inline-start: 0.5rem;
+  top: 0.5rem;
+  z-index: 20;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius-small);
+  background: var(--ink);
+  color: #ffffff;
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+.side-slot {
   background: var(--panel);
+  border-inline-end: 1px solid var(--line);
+}
+
+.side-foot {
+  grid-area: foot;
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.45rem 0.85rem 0.55rem;
+  background: var(--panel);
+  border-inline-end: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+}
+
+.side-foot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.app-header {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.55rem 0.85rem;
+  background: var(--panel);
+  border-inline-end: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
+}
+
+/* The mark says which app this is; the venue's name is what matters. */
+.brand-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .brand {
@@ -588,22 +661,16 @@ fieldset {
 }
 
 .venue-name {
-  font-weight: 600;
-  padding-inline-start: 1rem;
-  border-inline-start: 1px solid var(--line);
-}
-
-.header-end {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-inline-start: auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .account {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--ink-soft);
-  max-width: 16rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -615,6 +682,7 @@ fieldset {
 }
 
 .workspace-main {
+  grid-area: main;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -703,7 +771,25 @@ fieldset {
 }
 
 @media (min-width: 901px) {
+  /* Only the panel scrolls: adding, the state and saving stay in sight at the top. */
+  .side-slot {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .side-slot .toolbar {
+    flex: none;
+  }
+
+  .side-slot .side-panel {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
   .notice-area {
+    inset-inline-start: calc(var(--panel-width) + 0.75rem);
     width: min(30rem, calc(100vw - var(--panel-width) - 1.5rem));
   }
 }
@@ -764,34 +850,63 @@ fieldset {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  background: var(--panel);
   border-top: 1px solid var(--line);
 }
 
+/* The editor's tools, at the top of the left column: add, then the state and saving. */
 .toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem 0.75rem;
-  padding: 0.3rem 0.75rem;
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.7rem 0.85rem;
   border-bottom: 1px solid var(--line);
 }
 
 .toolbar-group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.toolbar-group .button {
+  justify-content: center;
+  padding-inline: 0.3rem;
+}
+
+.toolbar-group .button svg {
+  flex: none;
+}
+
+/* Short words on the add buttons; screen readers still hear the full ones. */
+.toolbar .label-full {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.toolbar .label-short {
+  display: inline;
 }
 
 .toolbar-end {
-  margin-inline-start: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
 }
 
-/* Discard and save stay side by side when the toolbar wraps. */
 .save-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 0.4rem;
+  width: 100%;
+}
+
+.save-actions .button {
+  justify-content: center;
 }
 
 .status-chip {
@@ -816,15 +931,9 @@ fieldset {
   color: var(--ink-soft);
 }
 
-.editor-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--panel-width);
-  flex: 1;
-  min-height: 0;
-}
-
 .canvas-wrap {
   position: relative;
+  flex: 1;
   min-height: 26rem;
   background-color: var(--mat);
   background-image:
@@ -1028,8 +1137,6 @@ fieldset {
 /* Side panel */
 
 .side-panel {
-  overflow-y: auto;
-  border-inline-start: 1px solid var(--line);
   background: var(--panel);
 }
 
@@ -1165,9 +1272,11 @@ fieldset {
 }
 
 .zoom-button[aria-disabled="true"] {
-  color: var(--ink-soft);
-  opacity: 0.55;
   cursor: default;
+}
+
+.zoom-button[aria-disabled="true"] svg {
+  opacity: 0.35;
 }
 
 .shortcuts-button {
@@ -1264,9 +1373,28 @@ kbd {
 /* Narrow screens: the panel goes under the plan. */
 
 @media (max-width: 900px) {
+  /* One column: the venue, the plan, then the tools and the panel under it, and the account. */
   .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr auto auto;
+    grid-template-areas:
+      "top"
+      "main"
+      "side"
+      "foot";
     height: auto;
     min-height: 100dvh;
+  }
+
+  .app-header,
+  .side-slot,
+  .side-foot {
+    border-inline-end: 0;
+  }
+
+  .side-slot {
+    overflow: visible;
+    border-top: 1px solid var(--line);
   }
 
   .workspace-main {
@@ -1281,23 +1409,11 @@ kbd {
     display: none;
   }
 
-  .editor-body {
-    grid-template-columns: 1fr;
-  }
-
   /* As tall as the zone needs at this width (plus room for the measurements), within limits. */
   .canvas-wrap {
+    flex: none;
     min-height: 0;
     height: clamp(18rem, calc(100vw * var(--plan-ratio, 0.75) + 9rem), 75vh);
-  }
-
-  .side-panel {
-    border-inline-start: 0;
-    border-top: 1px solid var(--line);
-  }
-
-  .account {
-    display: none;
   }
 }
 
@@ -1308,8 +1424,7 @@ kbd {
 
 /* Phones: one short row at the top, and buttons with fewer words, so the plan comes sooner. */
 @media (max-width: 600px) {
-  .label-full,
-  .brand-name {
+  .label-full {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -1323,31 +1438,11 @@ kbd {
     display: inline;
   }
 
-  .app-header {
-    flex-wrap: nowrap;
-    gap: 0.5rem;
-    padding-inline: 0.5rem;
-  }
-
-  .venue-name {
-    min-width: 0;
-    padding-inline-start: 0.5rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .header-end {
-    gap: 0.35rem;
-  }
-
+  .app-header,
   .zone-bar,
-  .toolbar {
+  .toolbar,
+  .side-foot {
     padding-inline: 0.5rem;
-  }
-
-  .toolbar-end {
-    margin-inline-start: 0;
   }
 }
 

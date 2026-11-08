@@ -28,6 +28,12 @@ export const NoticeContext = createContext<(notice: NoticeMessage | null) => voi
   // Without a provider (a component on its own in a test) messages go nowhere.
 });
 
+/**
+ * The place in the left column where the editor puts its tools and its panel, next to the
+ * venue's name. null until the column is on the page (and in tests of a component on its own).
+ */
+export const SideSlotContext = createContext<HTMLElement | null>(null);
+
 export function useNotice(): (notice: NoticeMessage | null) => void {
   return useContext(NoticeContext);
 }
