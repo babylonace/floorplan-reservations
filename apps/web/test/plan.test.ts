@@ -3,6 +3,7 @@ import { ApiError, type Api } from "../src/api/client";
 import { contrastRatio, tableColor, TABLE_COLORS, textOn } from "../src/plan/colors";
 import {
   addTable,
+  assumeSaved,
   changedFields,
   draftFromZone,
   draftIssues,
@@ -147,6 +148,34 @@ describe("the draft", () => {
     ]);
     expect(pendingChanges(after)).toEqual([
       { kind: "update", id: "b", label: "B", fields: { label: "B" } },
+    ]);
+  });
+});
+
+describe("after saving without reading the plan again", () => {
+  it("treats what the API accepted as stored, and keeps the rest pending", () => {
+    const stored = zone([
+      table({ id: "a", x: 100 }),
+      table({ id: "b", x: 300 }),
+      table({ id: "c", x: 500 }),
+    ]);
+    let draft = draftFromZone(stored);
+    draft = updateTable(draft, "a", { x: 120 });
+    draft = updateTable(draft, "b", { x: 320 });
+    draft = removeTable(draft, "c");
+    draft = addTable(draft, table({ id: "new:1", label: "9", x: 700 }));
+    // "a" and the new table were saved; "b" was refused; removing "c" was refused.
+    const created = new Map([["new:1", table({ id: "s1", label: "9", x: 700 })]]);
+    const assumed = assumeSaved(draft, stored, new Set(["b", "c"]), created);
+    expect(assumed.tables.map((t) => [t.id, t.x])).toEqual([
+      ["a", 120],
+      ["b", 300],
+      ["s1", 700],
+      ["c", 500],
+    ]);
+    const after = rebase(draft, assumed, new Set(["b"]));
+    expect(pendingChanges(after)).toEqual([
+      { kind: "update", id: "b", label: "b", fields: { x: 320 } },
     ]);
   });
 });

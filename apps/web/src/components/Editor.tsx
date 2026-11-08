@@ -7,6 +7,7 @@ import { describeError, describeIssue, isSignedOut } from "../errors";
 import { useI18n } from "../i18n/i18n";
 import {
   addTable,
+  assumeSaved,
   draftFromZone,
   draftIssues,
   newTableId,
@@ -151,7 +152,15 @@ export function Editor({
     for (const unsent of result.unsent) keep.add(unsent.id);
 
     const plan = await reload();
-    const fresh = plan?.zones.find((candidate) => candidate.id === zone.id);
+    const notSaved = new Set([
+      ...result.failures.map((failure) => failure.change.id),
+      ...result.unsent.map((change) => change.id),
+    ]);
+    // If the plan could not be read again, work from what the API answered, so saved changes
+    // are never sent twice.
+    const fresh = plan
+      ? plan.zones.find((candidate) => candidate.id === zone.id)
+      : assumeSaved(draft, zone, notSaved, result.created);
     if (fresh) {
       setDraft((current) => rebase(current, fresh, keep));
       setSelectedId((current) => (current ? (result.created.get(current)?.id ?? current) : null));

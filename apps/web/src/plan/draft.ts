@@ -176,3 +176,29 @@ export function rebase(previous: Draft, zone: PlanZone, keep: ReadonlySet<string
   const deleted = previous.deleted.filter((id) => keep.has(id) && fresh.saved.has(id));
   return { ...fresh, tables, deleted };
 }
+
+/**
+ * The zone as the API must now have it, worked out from a save's results, for when it cannot be
+ * read again. `notSaved` holds the ids of every change that was refused or not sent.
+ */
+export function assumeSaved(
+  previous: Draft,
+  zone: PlanZone,
+  notSaved: ReadonlySet<string>,
+  created: ReadonlyMap<string, Table>,
+): PlanZone {
+  const tables: Table[] = [];
+  for (const table of previous.tables) {
+    if (isNewId(table.id)) {
+      const stored = created.get(table.id);
+      if (stored) tables.push(stored);
+    } else {
+      tables.push(notSaved.has(table.id) ? (previous.saved.get(table.id) ?? table) : table);
+    }
+  }
+  for (const id of previous.deleted) {
+    const stored = previous.saved.get(id);
+    if (stored && notSaved.has(id)) tables.push(stored);
+  }
+  return { ...zone, tables, issues: [] };
+}
