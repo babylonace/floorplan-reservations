@@ -261,6 +261,9 @@ describe("the plan editor", () => {
     const dialog = await screen.findByRole("dialog", { name: "Vuelve a entrar" });
     expect(dialog).toHaveTextContent("lo que no habías guardado sigue en el plano");
     expect(within(dialog).getByLabelText("Correo electrónico")).toHaveFocus();
+    // Escape must not close it: that would go back to the sign-in page and lose the change.
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog", { name: "Vuelve a entrar" })).toBeInTheDocument();
     await user.type(within(dialog).getByLabelText("Correo electrónico"), "owner@example.com");
     await user.type(within(dialog).getByLabelText("Contraseña"), "right-password");
     await user.click(within(dialog).getByRole("button", { name: "Entrar" }));
@@ -362,7 +365,9 @@ describe("the plan editor", () => {
         "Puedes ver el plano. Solo la persona propietaria del local puede cambiarlo.",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Añadir mesa cuadrada" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Añadir mesa rectangular" }),
+    ).not.toBeInTheDocument();
     await focusTable("1");
     await user.keyboard("{ArrowRight}");
     expect(screen.getByLabelText("Desde la izquierda (cm)")).toHaveValue(100);

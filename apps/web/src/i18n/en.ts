@@ -77,13 +77,13 @@ export const en = {
     tablesCount: (n: number) => plural(n, "1 table", `${String(n)} tables`),
   },
   tables: {
-    addRect: "Add square table",
+    addRect: "Add rectangular table",
     addRound: "Add round table",
     panelTitle: (label: string) => `Table ${label}`,
     label: "Name or number",
     labelRequired: "Give the table a name or number.",
     shape: "Shape",
-    rect: "Square corners",
+    rect: "Rectangular",
     round: "Round",
     minSeats: "Fewest guests",
     maxSeats: "Most guests",
@@ -119,7 +119,7 @@ export const en = {
     tableName: (d: TableDescription) =>
       [
         `Table ${d.label}`,
-        d.round ? "round" : "square corners",
+        d.round ? "round" : "rectangular",
         d.minSeats === d.maxSeats
           ? `for ${String(d.maxSeats)}`
           : `for ${String(d.minSeats)} to ${String(d.maxSeats)}`,

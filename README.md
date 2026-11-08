@@ -142,12 +142,16 @@ A screen for the venue's owners to draw their rooms. Staff can open it too, read
 
 - **Drawn to scale** in SVG, one unit per centimetre, with the room's measurements along its edges and a scale bar. Tables show their seats as chairs around them.
 - **Mouse:** drag a table to move it (it snaps to 5 cm; hold Alt to place it freely), the round handle turns it in 15° steps, the square handle resizes it from its centre.
+- **Touch screens** (a tablet at the pass): a finger drags a table, and the handles grow so a finger can grab them (44 px). A finger on the free space around the tables scrolls the page as usual, so the side panel under the plan is easy to reach. Every button and field is at least 44 px tall on a touch screen, and the plan is only as tall as the room's shape needs.
 - **Keyboard:** Tab goes from table to table, the arrows move the selected one by 5 cm (50 cm with Shift), R turns it, Delete removes it, Escape lets go. Every table has a full name for screen readers ("Table 3, round, for 2 to 4, 500 cm from the left…"), and moves are announced.
 - **The side panel** edits everything the API stores: name, shape, seats, size, position, turn, colour and whether it can be booked online. With no table selected, it edits the zone. Zones are created, renamed, resized and deleted from there too.
 - **Problems show as you work.** The editor runs the same `validateZone` as the API on every change: overlapping tables are hatched in red, with the exact area where they meet, and listed with a link to each table.
 - **Nothing is saved until you press Save.** Saving sends only what changed, one table at a time. If the API refuses something (a table with an upcoming booking, a move that would leave a party without room), the message says which table and why, in the editor's language, and that change stays on screen to fix. A table that cannot be removed goes back on the plan. Moves that only fail because another table hasn't moved out of the way yet are tried again after the others. The browser asks before you leave with unsaved changes.
 - **Languages:** Spanish first, English as the fallback for anything not translated. Every text lives in `apps/web/src/i18n`; a lint rule refuses words written straight into the components, and a test checks Spanish has every English text.
-- **Accessibility:** visible keyboard focus, labels on every field, colours checked for contrast (table names pick dark or white text to stay above 4.5:1), and the browser tests run axe on the sign-in page and the editor.
+- **Accessibility:** visible keyboard focus, labels on every field, colours checked for contrast (table names pick dark or white text to stay above 4.5:1; the yellow selection ring has an ink edge so it stands out from the floor), handles you grab are at least 24 px with a mouse (WCAG 2.2 target size), and everything a drag does can also be typed in the side panel. The browser tests run axe on the sign-in page and the editor, and drive the editor on a touch tablet.
+- **The session ending** opens a sign-in dialog over the editor. It cannot be closed with Escape, because leaving it would lose what was not saved.
+
+![The editor on a tablet held upright, in Spanish: the plan fills the width, table 4 is selected with its larger turning and resizing handles, and the side panel starts below the plan.](docs/images/editor-tablet.png)
 
 ### Sign-in cookies in development and in production
 

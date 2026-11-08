@@ -48,7 +48,7 @@ export const es: DeepPartial<Messages> = {
     width: "Ancho (cm)",
     height: "Fondo (cm)",
     sizeHint: "1 m son 100 cm. Una sala de 12 × 8 m son 1200 × 800 cm.",
-    sortOrder: "Puesto en la lista",
+    sortOrder: "Orden en la lista",
     sortOrderHint: "Las zonas con números más bajos salen antes.",
     create: "Crear zona",
     creating: "Creando…",
@@ -65,13 +65,13 @@ export const es: DeepPartial<Messages> = {
     tablesCount: (n: number) => plural(n, "1 mesa", `${String(n)} mesas`),
   },
   tables: {
-    addRect: "Añadir mesa cuadrada",
+    addRect: "Añadir mesa rectangular",
     addRound: "Añadir mesa redonda",
     panelTitle: (label: string) => `Mesa ${label}`,
     label: "Nombre o número",
     labelRequired: "Ponle un nombre o un número.",
     shape: "Forma",
-    rect: "Con esquinas",
+    rect: "Rectangular",
     round: "Redonda",
     minSeats: "Mínimo de personas",
     maxSeats: "Máximo de personas",
@@ -107,7 +107,7 @@ export const es: DeepPartial<Messages> = {
     tableName: (d: TableDescription) =>
       [
         `Mesa ${d.label}`,
-        d.round ? "redonda" : "con esquinas",
+        d.round ? "redonda" : "rectangular",
         d.minSeats === d.maxSeats
           ? `para ${String(d.maxSeats)}`
           : `de ${String(d.minSeats)} a ${String(d.maxSeats)} personas`,

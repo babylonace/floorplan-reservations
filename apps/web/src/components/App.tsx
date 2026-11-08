@@ -77,12 +77,8 @@ export function App() {
         />
       </div>
       {signedIn.expired && (
-        <Modal
-          title={t.login.sessionEndedTitle}
-          onClose={() => {
-            setSession({ state: "signedOut" });
-          }}
-        >
+        // No Escape here: leaving this dialog would throw away what was not saved.
+        <Modal title={t.login.sessionEndedTitle}>
           <SignInForm
             intro={t.login.sessionEnded}
             onSignedIn={(account) => {

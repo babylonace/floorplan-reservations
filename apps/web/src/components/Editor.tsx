@@ -1,5 +1,5 @@
 import type { PlanIssue } from "@floorplan-reservations/engine";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ApiError } from "../api/client";
 import { useApi } from "../api/context";
 import type { FloorPlan, PlanZone, Table, ZoneFields } from "../api/types";
@@ -34,6 +34,12 @@ export interface EditorProps {
   onDirtyChange: (changes: number) => void;
   onSessionLost: () => void;
   onZoneDeleted: (name: string) => void;
+}
+
+/** Height over width of the zone, for the plan's height on narrow screens. */
+function planRatio(zone: { width: number; height: number }): number {
+  const ratio = zone.height / zone.width;
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : 0.75;
 }
 
 /** Stands for the plan itself in `focusNext`. */
@@ -315,7 +321,11 @@ export function Editor({
       )}
 
       <div className="editor-body">
-        <div className="canvas-wrap">
+        <div
+          className="canvas-wrap"
+          // On narrow screens the plan is as tall as the zone's shape needs, not a fixed share.
+          style={{ "--plan-ratio": String(planRatio(zone)) } as CSSProperties}
+        >
           <PlanCanvas
             zone={zone}
             tables={draft.tables}
