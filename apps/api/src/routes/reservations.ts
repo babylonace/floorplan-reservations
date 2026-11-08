@@ -10,16 +10,18 @@ import type { Pool } from "../db.js";
 
 const SLUG_PATTERN = "^[a-z0-9]+(-[a-z0-9]+)*$";
 
-// PostgreSQL error codes that mean "someone else got there first, try again".
-const EXCLUSION_VIOLATION = "23P01";
-const DEADLOCK_DETECTED = "40P01";
+// PostgreSQL error codes that mean "someone else got there first, try again". A foreign key
+// error means staff removed a table while this request was choosing it.
+const RETRY_CODES = new Set(["23P01", "40P01", "23503"]);
+// The database waited too long for a lock or a query: answer "busy, try again shortly".
+const TIMEOUT_CODES = new Set(["55P03", "57014"]);
 
-/**
- * How many times one request re-reads the free tables after losing a race. Each round of a race
- * has a winner, so this only runs out when many people book the same few tables at once; they
- * are then told nothing is free and can try again.
- */
-const MAX_ATTEMPTS = 8;
+// Keeps a stuck transaction from holding a table, and a pool connection, for ever.
+const LOCK_TIMEOUT = "3s";
+const STATEMENT_TIMEOUT = "10s";
+
+// Any character but NUL, which PostgreSQL cannot store in text.
+const NO_NUL = "^[^\\u0000]*$";
 
 const createBody = {
   type: "object",
@@ -34,7 +36,7 @@ const createBody = {
       description: "Arrival time with its offset, for example 2030-05-01T21:00:00+02:00.",
     },
     partySize: { type: "integer", minimum: 1, maximum: 100 },
-    guestName: { type: "string", minLength: 1, maxLength: 120, pattern: "\\S" },
+    guestName: { type: "string", minLength: 1, maxLength: 120, pattern: NO_NUL },
     guestEmail: { type: "string", format: "email", maxLength: 254 },
     guestPhone: { type: "string", minLength: 6, maxLength: 32, pattern: "^[+0-9 ()-]+$" },
     locale: {
@@ -42,7 +44,7 @@ const createBody = {
       pattern: "^[a-z]{2,3}(-[A-Z]{2})?$",
       description: "Language for messages to the guest. Defaults to the venue's language.",
     },
-    notes: { type: "string", maxLength: 500 },
+    notes: { type: "string", maxLength: 500, pattern: NO_NUL },
   },
 } as const;
 
@@ -110,8 +112,8 @@ interface TableRow {
 }
 
 /** The venue's bookable tables, grouped by zone in the order staff set. */
-async function loadPlan(pool: Pool, venueId: string): Promise<PlanZone[]> {
-  const { rows } = await pool.query<TableRow>(
+async function loadPlan(client: PoolClient, venueId: string): Promise<PlanZone[]> {
+  const { rows } = await client.query<TableRow>(
     `select t.id, t.zone_id, z.name as zone_name, z.width as zone_width, z.height as zone_height,
             t.label, t.min_seats, t.max_seats, t.shape, t.x, t.y, t.width, t.height, t.rotation
        from dining_tables t
@@ -150,30 +152,42 @@ async function loadPlan(pool: Pool, venueId: string): Promise<PlanZone[]> {
   return [...zones.values()];
 }
 
-function isRaceLost(error: unknown): boolean {
+function errorCode(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
-  return code === EXCLUSION_VIOLATION || code === DEADLOCK_DETECTED;
+  return typeof code === "string" ? code : "";
 }
 
-type Booking = { id: string; status: string; tableIds: string[] } | null;
+interface Booking {
+  id: string;
+  status: string;
+  tables: { id: string; label: string; zoneId: string }[];
+}
 
 /**
  * Books the best free tables inside one transaction. When another request takes the same table
- * first, the database rejects this one; it then rolls back to its savepoint, reads the free
- * tables again and tries the next best choice. Returns null when nothing is free.
+ * first, the database rejects this one; it then rolls back to its savepoint, reads the plan and
+ * the free tables again and tries the next best choice. Returns null when nothing is free.
+ *
+ * Every lost round means some table was just taken, so the rounds are bounded by the number of
+ * tables (plus a little room for ties PostgreSQL breaks as deadlocks).
  */
 async function bookBestTables(
   client: PoolClient,
-  plan: PlanZone[],
   venueId: string,
   body: CreateBody,
   locale: string,
   startsAt: Date,
   endsAt: Date,
-): Promise<Booking> {
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+): Promise<Booking | null> {
+  for (let attempt = 1, maxAttempts = 3; attempt <= maxAttempts; attempt++) {
     await client.query("savepoint attempt");
     try {
+      // Read inside the transaction, so tables staff just removed are not offered.
+      const plan = await loadPlan(client, venueId);
+      maxAttempts = Math.max(
+        maxAttempts,
+        plan.reduce((total, zone) => total + zone.tables.length, 0) + 3,
+      );
       const busy = await client.query<{ table_id: string }>(
         `select distinct table_id
            from reservation_tables
@@ -223,13 +237,31 @@ async function bookBestTables(
         [created.id, best.tableIds, venueId],
       );
       await client.query("release savepoint attempt");
-      return { ...created, tableIds: best.tableIds };
+
+      const zone = plan.find((candidate) => candidate.id === best.zoneId);
+      return {
+        ...created,
+        tables: best.tableIds.map((id) => ({
+          id,
+          label: zone?.tables.find((table) => table.id === id)?.label ?? "",
+          zoneId: best.zoneId,
+        })),
+      };
     } catch (error) {
-      if (!isRaceLost(error)) throw error;
+      if (!RETRY_CODES.has(errorCode(error))) throw error;
       await client.query("rollback to savepoint attempt");
     }
   }
   return null;
+}
+
+/** True when the date part of an ISO date-time names a real day (no 31 February). */
+function isRealDay(isoDateTime: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDateTime);
+  if (!match) return false;
+  const [year, month, day] = match.slice(1).map(Number) as [number, number, number];
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth;
 }
 
 export const reservationRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool }) => {
@@ -254,13 +286,17 @@ export const reservationRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { poo
           404: errorResponse,
           409: errorResponse,
           422: errorResponse,
+          503: errorResponse,
         },
       },
     },
     async (request, reply) => {
       const body = request.body;
+      if (!body.guestName.trim()) {
+        return reply.code(400).send({ error: "guestName must not be blank" });
+      }
       const startsAt = new Date(body.startsAt);
-      if (Number.isNaN(startsAt.getTime())) {
+      if (Number.isNaN(startsAt.getTime()) || !isRealDay(body.startsAt)) {
         return reply.code(400).send({ error: "startsAt is not a valid date" });
       }
       if (startsAt.getTime() <= Date.now()) {
@@ -289,18 +325,25 @@ export const reservationRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { poo
         return reply.code(400).send({ error: "This venue does not offer that language" });
       }
 
-      const plan = await loadPlan(pool, venue.id);
       const client = await pool.connect();
-      let booking: Booking;
+      let booking: Booking | null;
       try {
         await client.query("begin");
-        booking = await bookBestTables(client, plan, venue.id, body, locale, startsAt, endsAt);
+        await client.query(`set local lock_timeout = '${LOCK_TIMEOUT}'`);
+        await client.query(`set local statement_timeout = '${STATEMENT_TIMEOUT}'`);
+        booking = await bookBestTables(client, venue.id, body, locale, startsAt, endsAt);
         await client.query(booking ? "commit" : "rollback");
         client.release();
       } catch (error) {
         await client.query("rollback").catch(() => undefined);
         // A connection in an unknown state is thrown away instead of going back to the pool.
         client.release(true);
+        if (TIMEOUT_CODES.has(errorCode(error))) {
+          return reply
+            .code(503)
+            .header("retry-after", "5")
+            .send({ error: "Too busy right now. Please try again in a few seconds." });
+        }
         throw error;
       }
 
@@ -308,21 +351,13 @@ export const reservationRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { poo
         return reply.code(409).send({ error: "No table is free for that party at that time" });
       }
 
-      const tablesById = new Map(
-        plan.flatMap((zone) =>
-          zone.tables.map((table) => [
-            table.id,
-            { id: table.id, label: table.label, zoneId: zone.id },
-          ]),
-        ),
-      );
       return reply.code(201).send({
         id: booking.id,
         status: booking.status,
         startsAt: startsAt.toISOString(),
         endsAt: endsAt.toISOString(),
         partySize: body.partySize,
-        tables: booking.tableIds.flatMap((id) => tablesById.get(id) ?? []),
+        tables: booking.tables,
       });
     },
   );

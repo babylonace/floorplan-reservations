@@ -4,7 +4,7 @@ Table reservations for restaurants, where the venue draws its own floor plan and
 
 [Leer en español](README.es.md)
 
-> **Status: early.** This is phase 0: the project skeleton, the first database schema, a small engine and CI. You can't take a booking yet. See the [roadmap](#roadmap).
+> **Status: early.** Phase 1 is done: the API can take a booking and the database refuses double bookings. There is no floor plan editor, booking page or staff screen yet. See the [roadmap](#roadmap).
 
 ## Why
 
@@ -13,7 +13,7 @@ Many open-source booking tools treat tables as a list: "table 4, seats 4". Real 
 So the idea here is:
 
 - **The plan is the source of truth.** Each venue places its tables (position, size, shape, rotation, zone, look), and the engine reads that same data. If the plan says two tables touch, the engine can join them.
-- **No double bookings, enforced by the database.** Not by an "if" in the code that two requests can race past, but by a PostgreSQL constraint, with tests that fire bookings at it concurrently. (Coming in phase 1.)
+- **No double bookings, enforced by the database.** Not by an "if" in the code that two requests can race past, but by a PostgreSQL constraint, with tests that fire bookings at it concurrently.
 - **Several languages from the start.** Guests book in their language and get messages in it. Staff screens default to Spanish, with English available.
 - **Self-hosted.** One `docker compose up` and it runs. No per-cover fees.
 
@@ -24,8 +24,10 @@ Out of scope: orders, kitchen screens, point of sale.
 - `packages/engine`: booking rules with no database or network code, so they're quick to test.
   - `validateZone` checks a floor plan for tables that overlap, stick out of the room or have impossible seat counts. It takes rotation into account.
   - `durationFor` says how long a party keeps a table, based on its size.
+  - `seatingOptions` lists where a party could sit, best first: the smallest single table that fits, otherwise neighbouring tables pushed together.
 - `apps/api`: a [Fastify](https://fastify.dev/) API in TypeScript.
   - `GET /venues/:slug/floor-plan` returns the zones and tables, plus any problems the engine finds in the plan.
+  - `POST /venues/:slug/reservations` books a table. The engine picks the table (or tables), and how long it is kept depends on the party size. It answers `409` when nothing is free.
   - `GET /health` checks that the API can reach the database.
   - `GET /openapi.json` describes the API (OpenAPI 3.1).
 - `db/migrations`: the schema, as plain SQL files. A small runner applies them in order, each in a transaction, behind a lock so two copies of the app can't migrate at the same time.
@@ -77,9 +79,21 @@ CI runs the same checks on every pull request against PostgreSQL 18, and also bu
 - `style` is free-form JSON for the plan editor (colours and the like). The booking engine never reads it.
 - One reservation can take several tables (`reservation_tables`), for groups seated at tables pushed together.
 
+## How double bookings are stopped
+
+- Each reservation has its time as a range, `[start, end)`. A booking that ends at 21:30 and one that starts at 21:30 don't overlap.
+- `reservation_tables` keeps a copy of that range and of whether the reservation still holds its tables (cancelled and no-show ones don't). The copy is part of the foreign key to the reservation with `on update cascade`, so moving or cancelling a reservation updates it in the same statement.
+- An exclusion constraint (`btree_gist`) refuses two rows for the same table whose ranges overlap. It holds whatever code writes to the database.
+- The API reads the free tables, books the best option and, if another request got there first, rolls back to a savepoint and tries again. Requests that want the same table wait their turn, so they don't stall each other.
+- The tests hold back writes until every request in a burst has read the free tables, then release them at once: 25 requests for one table give exactly one booking.
+
+Joining tables: only rectangular tables in the same zone, standing side by side (gap of 5 cm or less) and not turned at an angle. At most three, and every one of them must be needed.
+
+Not checked yet: opening hours. Durations use the sample rules in `durationFor` for every venue for now.
+
 ## Roadmap
 
-1. **Booking engine with no double bookings.** A PostgreSQL exclusion constraint on table and time range, plus concurrency tests.
+1. ~~**Booking engine with no double bookings.**~~ Done.
 2. **Floor plan editor.** Draw zones and tables; tables that touch can be joined.
 3. **Public booking page.** Several languages (including right-to-left), suggests nearby times when the one asked for is full, GDPR-friendly.
 4. **Staff screen.** Today's service, confirm, cancel, seat, email notices.

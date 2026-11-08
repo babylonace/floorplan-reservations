@@ -141,6 +141,28 @@ describe("POST /venues/:slug/reservations", () => {
 
     const noOffset = await book("book-invalid", { startsAt: "2030-06-01T20:00:00", partySize: 2 });
     expect(noOffset.statusCode).toBe(400);
+
+    // JavaScript would quietly turn 31 February into 3 March.
+    const notADay = await book("book-invalid", {
+      startsAt: "2030-02-31T20:00:00+01:00",
+      partySize: 2,
+    });
+    expect(notADay.statusCode).toBe(400);
+
+    const blankName = await book("book-invalid", {
+      startsAt: EIGHT_PM,
+      partySize: 2,
+      guestName: "   ",
+    });
+    expect(blankName.statusCode).toBe(400);
+
+    // PostgreSQL cannot store NUL in text, so it must be refused before it gets there.
+    const nul = await book("book-invalid", {
+      startsAt: EIGHT_PM,
+      partySize: 2,
+      notes: "window\u0000seat",
+    });
+    expect(nul.statusCode).toBe(400);
   });
 
   it("returns 404 for a venue that does not exist", async () => {
@@ -151,7 +173,9 @@ describe("POST /venues/:slug/reservations", () => {
 
 describe("many bookings at once", { timeout: 20_000 }, () => {
   /**
-   * Fires `count` requests and makes sure they really race. Writes to reservation_tables are
+   * Fires `count` requests and makes sure they really race. It counts lock waits across the
+   * whole test database, which is safe because test files run one at a time
+   * (`fileParallelism: false`). Writes to reservation_tables are
    * held back until every request has read the free tables and is waiting to write (on the
    * table itself or in the per-table queue); then they all go at once. Without the gate the
    * first request can finish before the last one starts.
@@ -223,6 +247,40 @@ describe("many bookings at once", { timeout: 20_000 }, () => {
       [venueId],
     );
     expect(rows[0]?.count).toBe("4");
+  });
+
+  it("keeps trying while tables are free, however many rounds the race takes", async () => {
+    await venueWith(
+      "rush-big",
+      Array.from({ length: 12 }, (_, i) => ({ label: String(i + 1), x: 100 + i * 150 })),
+    );
+
+    // Every request wants the same best table each round, so filling 12 tables takes 12 rounds.
+    const responses = await allAtOnce(30, () =>
+      book("rush-big", { startsAt: EIGHT_PM, partySize: 2 }),
+    );
+
+    expect(responses.filter((response) => response.statusCode === 201)).toHaveLength(12);
+    expect(responses.filter((response) => response.statusCode === 409)).toHaveLength(18);
+  });
+
+  it("answers busy instead of waiting for ever behind a stuck booking", async () => {
+    const { tableIds } = await venueWith("stuck", [{ label: "only", x: 100 }]);
+    const holder = await pool.connect();
+    try {
+      // Another transaction holds the table's place in the queue and never finishes.
+      await holder.query("begin");
+      await holder.query("select pg_advisory_xact_lock(hashtextextended('table:' || $1, 0))", [
+        tableIds[0],
+      ]);
+
+      const response = await book("stuck", { startsAt: EIGHT_PM, partySize: 2 });
+      expect(response.statusCode).toBe(503);
+      expect(response.headers["retry-after"]).toBe("5");
+    } finally {
+      await holder.query("rollback");
+      holder.release();
+    }
   });
 
   it("never seats a joined group on a table another request just took", async () => {

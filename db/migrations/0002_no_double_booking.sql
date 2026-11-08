@@ -12,6 +12,22 @@
 --
 -- Ranges are half-open, [start, end): a booking that ends at 21:30 and one that starts at 21:30
 -- do not overlap.
+--
+-- Before running this on a database that already has bookings:
+-- - Adding the generated columns rewrites `reservations` and locks it while it does.
+-- - If two existing bookings already share a table at the same time, adding the constraint
+--   fails and the whole migration is rolled back; nothing changes. Find them first with
+--     select a.reservation_id, b.reservation_id, a.table_id
+--       from reservation_tables a
+--       join reservation_tables b on a.table_id = b.table_id and a.reservation_id < b.reservation_id
+--       join reservations ra on ra.id = a.reservation_id
+--       join reservations rb on rb.id = b.reservation_id
+--      where ra.status not in ('cancelled', 'no_show') and rb.status not in ('cancelled', 'no_show')
+--        and tstzrange(ra.starts_at, ra.ends_at) && tstzrange(rb.starts_at, rb.ends_at);
+-- - The database user needs permission to create extensions. btree_gist is a trusted extension,
+--   so the owner of the database is enough.
+-- - Bookings that end before they start now fail with a range error (22000) before the check
+--   constraint gets to say so.
 
 -- Lets a GiST index compare plain uuids with "=" next to the range's "&&".
 create extension if not exists btree_gist;
