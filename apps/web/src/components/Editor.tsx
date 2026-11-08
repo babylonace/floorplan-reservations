@@ -43,6 +43,19 @@ function planRatio(zone: { width: number; height: number }): number {
   return Number.isFinite(ratio) && ratio > 0 ? ratio : 0.75;
 }
 
+function fieldsOf(zone: PlanZone): ZoneFields {
+  return { name: zone.name, width: zone.width, height: zone.height, sortOrder: zone.sortOrder };
+}
+
+/** Whether the typed name or size differ from the stored zone. */
+function zoneDiffers(fields: ZoneFields, zone: ZoneFields): boolean {
+  return (
+    fields.name.trim() !== zone.name.trim() ||
+    fields.width !== zone.width ||
+    fields.height !== zone.height
+  );
+}
+
 /** Stands for the plan itself in `focusNext`. */
 const CANVAS = "canvas";
 
@@ -70,6 +83,8 @@ export function Editor({
   const sideSlot = useContext(SideSlotContext);
   const client = useApi();
   const [draft, setDraft] = useState<Draft>(() => draftFromZone(zone));
+  // The zone's name and size as typed; saved with the tables.
+  const [zoneFields, setZoneFields] = useState<ZoneFields>(() => fieldsOf(zone));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const showNotice = useNotice();
@@ -91,14 +106,21 @@ export function Editor({
   const focusNext = useRef<string | null>(null);
 
   const changes = useMemo(() => pendingChanges(draft), [draft]);
-  const issues = useMemo(() => draftIssues(draft, zone), [draft, zone]);
+  const zoneChanged = editable && zoneDiffers(zoneFields, zone);
+  const pending = changes.length + (zoneChanged ? 1 : 0);
+  // The plan shows the zone at the size being typed, so tables can be fitted before saving.
+  const { width, height } = zoneFields;
+  const shownZone = useMemo(() => ({ ...zone, width, height }), [zone, width, height]);
+  const issues = useMemo(() => draftIssues(draft, shownZone), [draft, shownZone]);
   const canEdit = editable && !busy;
   const labelsMissing = draft.tables.some((table) => !table.label.trim());
+  const nameMissing = !zoneFields.name.trim();
+  const canSave = canEdit && pending > 0 && !labelsMissing && !nameMissing;
   const selected = draft.tables.find((table) => table.id === selectedId) ?? null;
 
   useEffect(() => {
-    onDirtyChange(changes.length);
-  }, [changes.length, onDirtyChange]);
+    onDirtyChange(pending);
+  }, [pending, onDirtyChange]);
 
   // Keyboard focus follows tables that were just added, so arrows move them straight away.
   useEffect(() => {
@@ -132,7 +154,7 @@ export function Editor({
     const all = [...draft.tables, ...draft.saved.values()];
     // With a bar section selected, the new one carries on the bar, in line and the same size.
     const after = kind === "bar" && selected && isOneSided(selected) ? selected : null;
-    const inLine = after && nextInLine(after, zone, [...draft.tables]);
+    const inLine = after && nextInLine(after, shownZone, [...draft.tables]);
     const base = after && inLine ? after : { ...NEW_TABLE[kind], rotation: 0, style: {} };
     const table: Table = {
       id: newTableId(),
@@ -148,7 +170,13 @@ export function Editor({
       style: { ...base.style },
       // Stools stick out further than chairs, so a new bar keeps more room around it.
       ...(inLine ??
-        findFreeSpot(zone, [...draft.tables], base.width, base.height, kind === "bar" ? 55 : 20)),
+        findFreeSpot(
+          shownZone,
+          [...draft.tables],
+          base.width,
+          base.height,
+          kind === "bar" ? 55 : 20,
+        )),
       bookable: true,
     };
     setDraft((current) => addTable(current, table));
@@ -183,9 +211,39 @@ export function Editor({
     );
   }
 
+  /** Changes the stored zone; false (with the reason on screen) when that failed. */
+  async function storeZone(fields: ZoneFields): Promise<boolean> {
+    try {
+      await client.updateZone(slug, zone.id, fields);
+      return true;
+    } catch (error) {
+      const lines =
+        error instanceof ApiError
+          ? error.issues.map((issue) => describeIssue(t, issue, labelOf))
+          : [];
+      failWith(error, describeError(t, error, "zone"), lines);
+      return false;
+    }
+  }
+
+  /** Saves the zone's name and size and the changes to its tables, in one go. */
   async function save() {
+    if (!canSave) return;
     setBusy(true);
     setNotice(null);
+    const fields = { ...zoneFields, name: zoneFields.name.trim() };
+    // A zone that gets bigger grows before the tables are saved (they may have moved into the
+    // new room); one that gets smaller shrinks after (they may have moved out of the old one).
+    const roomy = {
+      ...fields,
+      width: Math.max(fields.width, zone.width),
+      height: Math.max(fields.height, zone.height),
+    };
+    if (zoneChanged && zoneDiffers(roomy, zone) && !(await storeZone(roomy))) {
+      setBusy(false);
+      return;
+    }
+
     const sent = changes;
     const result = await saveChanges(client, slug, zone.id, sent);
     const keep = new Set<string>();
@@ -196,6 +254,9 @@ export function Editor({
       if (!putBack) keep.add(failure.change.id);
     }
     for (const unsent of result.unsent) keep.add(unsent.id);
+    const tablesSaved = result.failures.length === 0 && result.unsent.length === 0;
+    const zoneSaved =
+      !zoneChanged || !zoneDiffers(fields, roomy) || (tablesSaved && (await storeZone(fields)));
 
     const plan = await reload();
     const notSaved = new Set([
@@ -211,11 +272,15 @@ export function Editor({
       setDraft((current) => rebase(current, fresh, keep));
       setSelectedId((current) => (current ? (result.created.get(current)?.id ?? current) : null));
     }
+    if (zoneSaved) setZoneFields(plan && fresh ? fieldsOf(fresh) : fields);
     setBusy(false);
 
-    if (result.failures.length === 0 && result.unsent.length === 0) {
+    if (tablesSaved) {
+      // Without the zone, its reason is already on screen.
       // The notice is a status message, so screen readers hear it without a second announcement.
-      setNotice({ tone: "success", text: t.save.saved(result.saved) });
+      if (zoneSaved) {
+        setNotice({ tone: "success", text: t.save.saved(result.saved + (zoneChanged ? 1 : 0)) });
+      }
       return;
     }
     const details = result.failures.flatMap((failure) => {
@@ -235,27 +300,10 @@ export function Editor({
 
   function discard() {
     setDraft(draftFromZone(zone));
+    setZoneFields(fieldsOf(zone));
     setSelectedId(null);
     setConfirming(null);
     setNotice(null);
-  }
-
-  async function saveZone(fields: ZoneFields) {
-    setBusy(true);
-    setNotice(null);
-    try {
-      const updated = await client.updateZone(slug, zone.id, fields);
-      await reload();
-      setNotice({ tone: "success", text: t.zones.saved(updated.name) });
-    } catch (error) {
-      const lines =
-        error instanceof ApiError
-          ? error.issues.map((issue) => describeIssue(t, issue, labelOf))
-          : [];
-      failWith(error, describeError(t, error, "zone"), lines);
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function deleteZone() {
@@ -276,8 +324,8 @@ export function Editor({
   // editor never starts without it and then moves (which would lose the panel's state).
   const side = (
     <>
-      <div className="toolbar" role="toolbar" aria-label={t.plan.toolbar}>
-        {editable && (
+      {editable && (
+        <div className="toolbar" role="toolbar" aria-label={t.plan.toolbar}>
           <div className="add-tables-section">
             <div className="add-title">{t.tables.addTitle}</div>
             <div className="toolbar-group">
@@ -327,50 +375,8 @@ export function Editor({
               </button>
             </div>
           </div>
-        )}
-        <div className="toolbar-group toolbar-end">
-          <span
-            className={issues.length > 0 ? "status-chip status-problem" : "status-chip status-ok"}
-          >
-            {issues.length > 0 ? t.issues.count(issues.length) : t.issues.noneShort}
-          </span>
-          {editable && (
-            <>
-              <span className="save-state" aria-live="polite">
-                {labelsMissing
-                  ? t.save.needsLabels
-                  : changes.length > 0
-                    ? t.save.unsaved(changes.length)
-                    : t.save.allSaved}
-              </span>
-              <span className="save-actions">
-                <button
-                  type="button"
-                  className="button"
-                  disabled={!canEdit || changes.length === 0}
-                  onClick={() => {
-                    setConfirming("discard");
-                  }}
-                >
-                  <ButtonLabel full={t.save.discard} short={t.save.discardShort} />
-                </button>
-                <button
-                  type="button"
-                  className="button button-primary"
-                  disabled={!canEdit || changes.length === 0 || labelsMissing}
-                  onClick={() => void save()}
-                >
-                  {busy ? (
-                    t.save.saving
-                  ) : (
-                    <ButtonLabel full={t.save.save} short={t.save.saveShort} />
-                  )}
-                </button>
-              </span>
-            </>
-          )}
         </div>
-      </div>
+      )}
 
       <aside className="side-panel" aria-label={t.zones.panelTitle}>
         {selected ? (
@@ -389,13 +395,12 @@ export function Editor({
         ) : (
           <ZonePanel
             zone={zone}
+            fields={zoneFields}
             tableCount={draft.tables.length}
             editable={editable}
-            busy={busy}
-            onSave={(fields) => void saveZone(fields)}
-            onDelete={() => {
-              setConfirming("deleteZone");
-            }}
+            disabled={!canEdit}
+            onChange={setZoneFields}
+            onSubmit={() => void save()}
           />
         )}
 
@@ -422,6 +427,60 @@ export function Editor({
           </section>
         )}
       </aside>
+
+      {/* One set of actions for the zone on screen: its name and size and its tables together. */}
+      <div className="panel-actions">
+        <div className="panel-state">
+          <span
+            className={issues.length > 0 ? "status-chip status-problem" : "status-chip status-ok"}
+          >
+            {issues.length > 0 ? t.issues.count(issues.length) : t.issues.noneShort}
+          </span>
+          {editable && (
+            <span className="save-state" aria-live="polite">
+              {labelsMissing
+                ? t.save.needsLabels
+                : nameMissing
+                  ? t.save.needsName
+                  : pending > 0
+                    ? t.save.unsaved(pending)
+                    : t.save.allSaved}
+            </span>
+          )}
+        </div>
+        {editable && (
+          <div className="save-actions">
+            <button
+              type="button"
+              className="button button-primary"
+              disabled={!canSave}
+              onClick={() => void save()}
+            >
+              {busy ? t.save.saving : <ButtonLabel full={t.save.save} short={t.save.saveShort} />}
+            </button>
+            <button
+              type="button"
+              className="button"
+              disabled={!canEdit || pending === 0}
+              onClick={() => {
+                setConfirming("discard");
+              }}
+            >
+              <ButtonLabel full={t.save.discard} short={t.save.discardShort} />
+            </button>
+            <button
+              type="button"
+              className="button button-danger-quiet"
+              disabled={!canEdit}
+              onClick={() => {
+                setConfirming("deleteZone");
+              }}
+            >
+              {t.zones.remove}
+            </button>
+          </div>
+        )}
+      </div>
     </>
   );
 
@@ -431,10 +490,10 @@ export function Editor({
       <div
         className="canvas-wrap"
         // On narrow screens the plan is as tall as the zone's shape needs, not a fixed share.
-        style={{ "--plan-ratio": String(planRatio(zone)) } as CSSProperties}
+        style={{ "--plan-ratio": String(planRatio(shownZone)) } as CSSProperties}
       >
         <PlanCanvas
-          zone={zone}
+          zone={shownZone}
           tables={draft.tables}
           issues={issues}
           selectedId={selectedId}
@@ -461,7 +520,7 @@ export function Editor({
       {confirming === "discard" && (
         <ConfirmDialog
           title={t.save.discardTitle}
-          body={t.save.discardBody(changes.length, zone.name)}
+          body={t.save.discardBody(pending, zone.name)}
           confirm={t.save.confirmDiscard}
           cancel={t.save.keepEditing}
           danger

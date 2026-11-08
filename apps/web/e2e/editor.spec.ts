@@ -192,8 +192,9 @@ test("creates, renames and deletes a zone", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Patio" })).toHaveAttribute("aria-current", "true");
 
   await page.getByLabel("Nombre").fill("Patio interior");
-  await page.getByRole("button", { name: "Guardar zona" }).click();
-  await expect(page.getByText("Zona «Patio interior» guardada.")).toBeVisible();
+  await page.getByRole("button", { name: "Guardar cambios" }).click();
+  await expect(page.getByText("Cambio guardado.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Patio interior" })).toBeVisible();
 
   await page.getByRole("button", { name: "Borrar zona" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Borrar zona" }).click();
@@ -214,10 +215,15 @@ test("puts the plan on the right, as tall as the window, and the rest in a colum
   // Only the zone tabs above the plan, and the plan reaches the bottom of the window.
   expect(plan.y).toBeLessThan(60);
   expect(Math.abs(plan.y + plan.height - viewport.height)).toBeLessThan(2);
-  // The tools are in the column on its left, with the account at the bottom.
-  for (const button of [add, save, signOut]) expect(button.x + button.width).toBeLessThan(plan.x);
+  // The tools are in the column on its left, adding at the top and saving at the bottom; the
+  // language and signing out are in the top right corner.
+  for (const button of [add, save]) expect(button.x + button.width).toBeLessThan(plan.x);
   expect(add.y).toBeLessThan(save.y);
-  expect(signOut.y + signOut.height).toBeGreaterThan(viewport.height - 60);
+  expect(save.y + save.height).toBeGreaterThan(viewport.height - 60);
+  expect(signOut.y).toBeLessThan(40);
+  expect(signOut.x + signOut.width).toBeGreaterThan(viewport.width - 40);
+  // With a mouse, buttons are compact.
+  expect(save.height).toBeLessThanOrEqual(32);
 
   // In a short window only the panel scrolls: saving stays in sight.
   await page.setViewportSize({ width: 1280, height: 560 });
