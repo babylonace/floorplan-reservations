@@ -1,4 +1,4 @@
-import type { PlanIssue } from "@floorplan-reservations/engine";
+import { isOneSided, type PlanIssue } from "@floorplan-reservations/engine";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ApiError } from "../api/client";
 import { useApi } from "../api/context";
@@ -18,7 +18,7 @@ import {
   type Change,
   type Draft,
 } from "../plan/draft";
-import { findFreeSpot, nextLabel } from "../plan/geometry";
+import { findFreeSpot, nextInLine, nextLabel } from "../plan/geometry";
 import { saveChanges } from "../plan/save";
 import { PlanCanvas } from "./PlanCanvas";
 import { TableInspector } from "./TableInspector";
@@ -46,9 +46,14 @@ function planRatio(zone: { width: number; height: number }): number {
 const CANVAS = "canvas";
 
 const NEW_TABLE = {
-  rect: { width: 120, height: 80, minSeats: 2, maxSeats: 4 },
-  round: { width: 90, height: 90, minSeats: 2, maxSeats: 4 },
-} as const;
+  rect: { shape: "rect", width: 120, height: 80, minSeats: 2, maxSeats: 4, seatSides: null },
+  round: { shape: "round", width: 90, height: 90, minSeats: 2, maxSeats: 4, seatSides: null },
+  // A section of bar: two stools along one long side.
+  bar: { shape: "rect", width: 120, height: 50, minSeats: 1, maxSeats: 2, seatSides: ["bottom"] },
+} as const satisfies Record<
+  string,
+  Pick<Table, "shape" | "width" | "height" | "minSeats" | "maxSeats" | "seatSides">
+>;
 
 /** One zone being edited: the plan, the toolbar, and the panel beside them. */
 export function Editor({
@@ -121,24 +126,37 @@ export function Editor({
     setNotice({ tone: "error", text, details });
   }
 
-  function add(shape: "rect" | "round") {
-    const size = NEW_TABLE[shape];
-    const spot = findFreeSpot(zone, [...draft.tables], size.width, size.height);
+  function add(kind: keyof typeof NEW_TABLE) {
+    const all = [...draft.tables, ...draft.saved.values()];
+    // With a bar section selected, the new one carries on the bar, in line and the same size.
+    const after = kind === "bar" && selected && isOneSided(selected) ? selected : null;
+    const inLine = after && nextInLine(after, zone, [...draft.tables]);
+    const base = after && inLine ? after : { ...NEW_TABLE[kind], rotation: 0, style: {} };
     const table: Table = {
       id: newTableId(),
       zoneId: zone.id,
-      label: nextLabel([...draft.tables, ...draft.saved.values()]),
-      shape,
-      ...size,
-      ...spot,
-      rotation: 0,
-      style: {},
+      label: kind === "bar" ? nextLabel(all, t.tables.barPrefix) : nextLabel(all),
+      shape: base.shape,
+      width: base.width,
+      height: base.height,
+      minSeats: base.minSeats,
+      maxSeats: base.maxSeats,
+      seatSides: base.seatSides ? [...base.seatSides] : null,
+      rotation: base.rotation,
+      style: { ...base.style },
+      // Stools stick out further than chairs, so a new bar keeps more room around it.
+      ...(inLine ??
+        findFreeSpot(zone, [...draft.tables], base.width, base.height, kind === "bar" ? 55 : 20)),
       bookable: true,
     };
     setDraft((current) => addTable(current, table));
     setSelectedId(table.id);
     focusNext.current = table.id;
-    setAnnouncement(t.announce.added(table.label));
+    setAnnouncement(
+      after && inLine
+        ? t.announce.addedInLine(table.label, after.label)
+        : t.announce.added(table.label),
+    );
   }
 
   function change(id: string, patch: Partial<Table>) {
@@ -283,6 +301,22 @@ export function Editor({
                 <path d="M16 6v6M13 9h6" />
               </svg>
               <ButtonLabel full={t.tables.addRound} short={t.tables.addRoundShort} />
+            </button>
+            <button
+              type="button"
+              className="button tool-button"
+              disabled={!canEdit}
+              onClick={() => {
+                add("bar");
+              }}
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <rect x="1.5" y="5" width="11" height="5" rx="1" />
+                <circle cx="4.5" cy="13.5" r="1.5" />
+                <circle cx="9.5" cy="13.5" r="1.5" />
+                <path d="M16 6v6M13 9h6" />
+              </svg>
+              <ButtonLabel full={t.tables.addBar} short={t.tables.addBarShort} />
             </button>
           </div>
         )}

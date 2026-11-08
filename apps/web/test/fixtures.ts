@@ -18,6 +18,7 @@ export function table(overrides: Partial<Table> & { id: string }): Table {
     rotation: 0,
     style: {},
     bookable: true,
+    seatSides: null,
     ...overrides,
   };
 }

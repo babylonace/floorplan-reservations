@@ -66,6 +66,9 @@ export function rotationFromHandle(table: PlanTable, point: Point, step = TURN_S
   return normalizeRotation(Math.round(degrees / step) * step);
 }
 
+/** Below this, in cm, two edges count as touching: rounding from turning must not decide it. */
+const EPSILON = 0.01;
+
 function overlaps(a: Box, b: Box): boolean {
   return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 }
@@ -108,14 +111,75 @@ export function findFreeSpot(
   return { x: snap(zone.width / 2), y: snap(zone.height / 2) };
 }
 
-/** The next free table number: one more than the highest number in use. */
-export function nextLabel(tables: { label: string }[]): string {
+/**
+ * The next free table name: one more than the highest number in use, after `prefix` if there is
+ * one ("B1", "B2"… for bar sections).
+ */
+export function nextLabel(tables: { label: string }[], prefix = ""): string {
   const used = new Set(tables.map((table) => table.label.trim().toLowerCase()));
+  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^${escaped}(\\d+)$`, "i");
   const highest = Math.max(
     0,
-    ...tables.map((table) => (/^\d+$/.test(table.label.trim()) ? Number(table.label) : 0)),
+    ...tables.map((table) => Number(pattern.exec(table.label.trim())?.[1] ?? 0)),
   );
   let next = highest + 1;
-  while (used.has(String(next))) next += 1;
-  return String(next);
+  while (used.has(`${prefix}${String(next)}`.toLowerCase())) next += 1;
+  return `${prefix}${String(next)}`;
+}
+
+/**
+ * Where the next section of a bar goes: straight after `section`, along its length, the same
+ * way round, so the stools stay in a line. The far end first, then the near end. null when
+ * neither end has room inside the zone without touching another table.
+ */
+export function nextInLine(
+  section: PlanTable,
+  zone: { width: number; height: number },
+  tables: PlanTable[],
+): Point | null {
+  const radians = (section.rotation * Math.PI) / 180;
+  const along = { x: Math.cos(radians) * section.width, y: Math.sin(radians) * section.width };
+  const others = tables.filter((table) => table.id !== section.id).map(boundingBox);
+  for (const sign of [1, -1]) {
+    const spot = {
+      x: Math.round(section.x + sign * along.x),
+      y: Math.round(section.y + sign * along.y),
+    };
+    const box = boundingBox({ ...section, ...spot });
+    const inside =
+      box.left >= -EPSILON &&
+      box.top >= -EPSILON &&
+      box.right <= zone.width + EPSILON &&
+      box.bottom <= zone.height + EPSILON;
+    const inner = {
+      left: box.left + EPSILON,
+      top: box.top + EPSILON,
+      right: box.right - EPSILON,
+      bottom: box.bottom - EPSILON,
+    };
+    if (inside && !others.some((other) => overlaps(inner, other))) return spot;
+  }
+  return null;
+}
+
+/**
+ * `seats` shared out over sides of these lengths, in proportion, the biggest leftovers first,
+ * so a long side gets more chairs than a short one.
+ */
+export function shareSeats(seats: number, lengths: number[]): number[] {
+  const total = lengths.reduce((sum, length) => sum + length, 0);
+  if (total <= 0 || lengths.length === 0) return lengths.map(() => 0);
+  const exact = lengths.map((length) => (seats * length) / total);
+  const counts = exact.map(Math.floor);
+  const order = exact
+    .map((value, index) => ({ index, left: value - Math.floor(value) }))
+    .sort((a, b) => b.left - a.left || a.index - b.index);
+  let missing = seats - counts.reduce((sum, count) => sum + count, 0);
+  for (const { index } of order) {
+    if (missing <= 0) break;
+    counts[index] = (counts[index] ?? 0) + 1;
+    missing -= 1;
+  }
+  return counts;
 }

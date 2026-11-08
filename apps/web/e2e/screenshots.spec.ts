@@ -41,6 +41,15 @@ test("editor showing two tables on top of each other", async ({ page }) => {
   await page.screenshot({ path: `${folder}editor-problem-en.png` });
 });
 
+test("a bar in sections, with stools on one side", async ({ page }) => {
+  await signIn(page);
+  const addBar = page.getByRole("button", { name: "Añadir tramo de barra" });
+  for (let i = 0; i < 3; i++) await addBar.click();
+  await page.getByRole("button", { name: /^Mesa B3,/ }).focus();
+  await page.mouse.move(0, 0);
+  await page.screenshot({ path: `${folder}editor-bar.png` });
+});
+
 test.describe("on a tablet", () => {
   test.use({ viewport: { width: 768, height: 1024 }, hasTouch: true, isMobile: true });
 

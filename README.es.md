@@ -96,7 +96,7 @@ La CI pasa las mismas comprobaciones en cada pull request contra PostgreSQL 18. 
 
 ## Cómo se guarda el plano
 
-- Las medidas van en centímetros.
+- `seatSides` dice qué lados de una mesa rectangular tienen asientos, antes de girarla (`top`, `right`, `bottom`, `left`). `null`, el valor por defecto, son asientos alrededor, como han tenido siempre las mesas; la migración `0006` lo añade sin cambiar las mesas que ya había.
 - `x` e `y` de una mesa son la posición de su **centro** dentro de la zona, contando desde la esquina de arriba a la izquierda. El giro va en grados, en el sentido de las agujas del reloj.
 - `style` es JSON libre para el editor del plano (colores y similares). El motor de reservas nunca lo lee.
 - Una reserva puede ocupar varias mesas (`reservation_tables`), para grupos en mesas juntas.
@@ -147,6 +147,7 @@ Una pantalla para que los propietarios del local dibujen sus salas. El personal 
 - **El panel lateral** cambia todo lo que guarda la API: nombre, forma, personas, tamaño, posición, giro, color y si se puede reservar por internet. Sin ninguna mesa elegida, cambia la zona. Las zonas también se crean, se renombran, cambian de tamaño y se borran desde ahí.
 - **Medidas en metros.** El ancho, el fondo y la posición se ven y se escriben en metros, con la coma o el punto del idioma del editor (1,2 m en español, 1.2 m en inglés); al escribir valen los dos, y las flechas suben o bajan el valor de 5 en 5 cm. La API sigue guardando centímetros enteros.
 - **Compacto, como una herramienta de trabajo.** Con ratón, los botones y campos miden 32 px y los paneles van más juntos, así que cabe más plano en pantalla; en pantallas táctiles siguen en 44 px. En el móvil las filas de arriba usan etiquetas cortas (los lectores de pantalla siguen oyendo las completas) y el plano empieza más arriba.
+- **Barras y mesas contra la pared.** Una mesa rectangular tiene asientos alrededor (lo normal) o en los lados que marques, colocados alrededor de un dibujito de la mesa. **Añadir tramo de barra** pone un tramo de 1,2 m con dos taburetes en un lado; si hay un tramo elegido, el siguiente va justo detrás, en línea y mirando al mismo lado. Las sillas y los taburetes solo se dibujan en los lados con asientos.
 - **Avisos flotantes.** Al guardar, crear o borrar, un aviso corto flota sobre la parte de abajo del plano (sin tapar el panel lateral), así que nada se mueve en la página. Las buenas noticias se cierran solas a los seis segundos, pero esperan mientras el puntero o el teclado están encima; los errores se quedan hasta que se cierran. Los lectores de pantalla oyen los dos.
 - **Los problemas se ven mientras trabajas.** El editor pasa el mismo `validateZone` que la API en cada cambio: las mesas que se pisan salen rayadas en rojo, con la zona exacta donde se tocan, y aparecen en una lista con un enlace a cada mesa.
 - **No se guarda nada hasta que pulsas Guardar.** Guardar envía solo lo que cambió, mesa por mesa. Si la API rechaza algo (una mesa con una reserva próxima, un movimiento que dejaría a un grupo sin sitio), el aviso dice qué mesa y por qué, en el idioma del editor, y ese cambio se queda en pantalla para arreglarlo. Una mesa que no se puede quitar vuelve al plano. Los movimientos que solo fallan porque otra mesa todavía no se ha apartado se vuelven a intentar después de los demás. El navegador pregunta antes de salir con cambios sin guardar.
@@ -157,6 +158,8 @@ Una pantalla para que los propietarios del local dibujen sus salas. El personal 
 ![El editor en una tablet en vertical, en español: el plano ocupa todo el ancho, la mesa 4 está elegida con sus tiradores de girar y de tamaño más grandes, y el panel lateral empieza debajo del plano.](docs/images/editor-tablet.png)
 
 ![El editor en un móvil, en español: una sola fila corta arriba con el local, el idioma y un icono para salir, botones con etiquetas cortas (Rectangular, Redonda, Descartar, Guardar) y el plano justo debajo.](docs/images/editor-phone.png)
+
+![Una barra hecha con tres tramos, de B1 a B3, cada uno con dos taburetes redondos en su lado de abajo; el panel lateral de B3 muestra "Asientos: en algunos lados" con solo "Abajo" marcado alrededor de un dibujito de la mesa.](docs/images/editor-bar.png)
 
 ### Las cookies de sesión en desarrollo y en producción
 
@@ -173,7 +176,9 @@ La cookie de sesión es `__Host-`, `Secure` y `SameSite=Strict`, y la API rechaz
 - La API mira las mesas libres, reserva la mejor opción y, si otra petición llegó antes, vuelve a un punto guardado y lo intenta otra vez. Las peticiones que quieren la misma mesa esperan su turno, así no se bloquean entre ellas.
 - Los tests frenan las escrituras hasta que todas las peticiones de una ráfaga han mirado las mesas libres y luego las sueltan a la vez: 25 peticiones por una sola mesa dan exactamente una reserva.
 
-Mesas juntas: solo mesas rectangulares de la misma zona, una al lado de otra (5 cm de hueco como mucho) y sin girar en ángulo. Tres como máximo, y todas tienen que hacer falta.
+Mesas juntas: solo mesas rectangulares de la misma zona, una al lado de otra (5 cm de hueco como mucho) y sin girar en ángulo. Tres como máximo, y todas tienen que hacer falta. Nunca se juntan por un lado con asientos, así que las mesas juntas conservan todos los asientos que dicen tener.
+
+Barras: una barra dibujada como una sola mesa larga la ocuparía entera una pareja. Por eso la barra se dibuja en tramos cortos con asientos en un lado (por ejemplo dos taburetes cada uno): una pareja reserva un tramo, y un grupo ocupa tramos seguidos, hasta seis, en línea (taburetes mirando al mismo lado y bordes alineados). Los tramos espalda con espalda a los dos lados de una barra, o mirando a lados distintos, nunca son un mismo grupo, y los tramos de barra no se juntan con mesas normales. Una mesa contra la pared (asientos en un lado) sigue la misma regla.
 
 Por ahora todos los locales usan las duraciones de ejemplo de `durationFor`.
 

@@ -5,6 +5,7 @@ import {
   seatingOptions,
   type PlanZone,
   type TableShape,
+  type TableSide,
 } from "@floorplan-reservations/engine";
 import type { FastifyPluginAsync } from "fastify";
 import type { PoolClient } from "pg";
@@ -184,13 +185,15 @@ interface TableRow {
   width: number;
   height: number;
   rotation: number;
+  seat_sides: TableSide[] | null;
 }
 
 /** The venue's bookable tables, grouped by zone in the order staff set. */
 async function loadPlan(client: PoolClient, venueId: string): Promise<PlanZone[]> {
   const { rows } = await client.query<TableRow>(
     `select t.id, t.zone_id, z.name as zone_name, z.width as zone_width, z.height as zone_height,
-            t.label, t.min_seats, t.max_seats, t.shape, t.x, t.y, t.width, t.height, t.rotation
+            t.label, t.min_seats, t.max_seats, t.shape, t.x, t.y, t.width, t.height, t.rotation,
+            t.seat_sides
        from dining_tables t
        join zones z on z.id = t.zone_id
       where t.venue_id = $1 and t.bookable and t.retired_at is null and z.retired_at is null
@@ -222,6 +225,7 @@ async function loadPlan(client: PoolClient, venueId: string): Promise<PlanZone[]
       width: row.width,
       height: row.height,
       rotation: row.rotation,
+      seatSides: row.seat_sides,
     });
   }
   return [...zones.values()];

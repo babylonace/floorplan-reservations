@@ -13,6 +13,8 @@ export interface TableDescription {
   rotation: number;
   bookable: boolean;
   problems: number;
+  /** How many sides have seats; null when they go all around. */
+  seatedSides: number | null;
 }
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
@@ -82,6 +84,10 @@ export const en = {
     /** On narrow screens, next to the shape; the full name above is what screen readers hear. */
     addRectShort: "Rectangular",
     addRoundShort: "Round",
+    addBar: "Add bar section",
+    addBarShort: "Bar",
+    /** Bar sections are named B1, B2… */
+    barPrefix: "B",
     panelTitle: (label: string) => `Table ${label}`,
     label: "Name or number",
     labelRequired: "Give the table a name or number.",
@@ -96,6 +102,15 @@ export const en = {
     position: "Position (m)",
     x: "From the left",
     y: "From the top",
+    seats: "Seats",
+    seatsAround: "All around",
+    seatsSides: "Chosen sides",
+    sides: { top: "Top", right: "Right", bottom: "Bottom", left: "Left" },
+    sidesLegend: "Sides with seats",
+    sidesHint:
+      "Sides of the table before it is turned. A bar or a table against the wall has seats on one side. Tables are never pushed together along a side with seats, so with all four ticked this table is never joined to another; “All around” joins as usual. At least one side stays ticked.",
+    barHint:
+      "Bar section: guests can book one section, and a group gets several sections next to each other in a line. Add more with “Add bar section” while this one is selected. At least one side stays ticked.",
     bookable: "Can be booked online",
     bookableHint: "When unticked, the table stays on the plan but guests cannot book it online.",
     color: "Colour",
@@ -129,6 +144,11 @@ export const en = {
           : `for ${String(d.minSeats)} to ${String(d.maxSeats)}`,
         `${d.x} from the left and ${d.y} from the top`,
         d.rotation === 0 ? "" : `turned ${String(d.rotation)} degrees`,
+        d.seatedSides === null
+          ? ""
+          : d.seatedSides === 1
+            ? "seats on one side"
+            : `seats on ${String(d.seatedSides)} sides`,
         d.bookable ? "" : "not bookable online",
         d.problems === 0 ? "" : plural(d.problems, "1 problem", `${String(d.problems)} problems`),
       ]
@@ -191,6 +211,7 @@ export const en = {
       `Table ${label} is now ${width} by ${depth}.`,
     removed: (label: string) => `Table ${label} removed. Save to make it final.`,
     added: (label: string) => `Table ${label} added.`,
+    addedInLine: (label: string, after: string) => `Bar section ${label} added after ${after}.`,
   },
   errors: {
     network: "The server cannot be reached. Check the connection and try again.",

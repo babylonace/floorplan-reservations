@@ -1,3 +1,4 @@
+import { isOneSided, TABLE_SIDES, type TableSide } from "@floorplan-reservations/engine";
 import { useId } from "react";
 import type { Table } from "../api/types";
 import { useI18n } from "../i18n/i18n";
@@ -5,6 +6,11 @@ import { isNewId } from "../plan/draft";
 import { DEFAULT_TABLE_COLOR, TABLE_COLORS, tableColor } from "../plan/colors";
 import { MAX_CM, MIN_SIZE_CM, normalizeRotation } from "../plan/geometry";
 import { MetreField, NumberField } from "./ui";
+
+/** The long sides of a table: where the chairs go when its seats are all around. */
+function longSides(table: Table): TableSide[] {
+  return table.width >= table.height ? ["top", "bottom"] : ["left", "right"];
+}
 
 /** Every detail of the selected table, as form fields. Changes go into the draft at once. */
 export function TableInspector({
@@ -80,6 +86,59 @@ export function TableInspector({
             ))}
           </div>
         </fieldset>
+
+        {table.shape === "rect" && (
+          <fieldset className="field">
+            <legend>{t.tables.seats}</legend>
+            <div className="segmented">
+              {(["around", "sides"] as const).map((mode) => (
+                <label key={mode}>
+                  <input
+                    type="radio"
+                    name={`${ids}-seats`}
+                    value={mode}
+                    checked={(table.seatSides === null) === (mode === "around")}
+                    onChange={() => {
+                      onChange({ seatSides: mode === "around" ? null : longSides(table) });
+                    }}
+                  />
+                  <span>{mode === "around" ? t.tables.seatsAround : t.tables.seatsSides}</span>
+                </label>
+              ))}
+            </div>
+            {table.seatSides && (
+              <fieldset className="side-picker" aria-describedby={`${ids}-sides-hint`}>
+                <legend className="visually-hidden">{t.tables.sidesLegend}</legend>
+                <span className="side-picker-table" aria-hidden="true" />
+                {TABLE_SIDES.map((side) => {
+                  const on = table.seatSides?.includes(side) ?? false;
+                  return (
+                    <label key={side} className={`side-pick side-pick-${side}`}>
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        // At least one side keeps its seats; "All around" is the other choice.
+                        disabled={on && table.seatSides?.length === 1}
+                        onChange={(event) => {
+                          const chosen = new Set(table.seatSides);
+                          if (event.target.checked) chosen.add(side);
+                          else chosen.delete(side);
+                          onChange({ seatSides: TABLE_SIDES.filter((s) => chosen.has(s)) });
+                        }}
+                      />
+                      <span>{t.tables.sides[side]}</span>
+                    </label>
+                  );
+                })}
+              </fieldset>
+            )}
+            {table.seatSides && (
+              <p id={`${ids}-sides-hint`} className="field-hint">
+                {isOneSided(table) ? t.tables.barHint : t.tables.sidesHint}
+              </p>
+            )}
+          </fieldset>
+        )}
 
         <div className="field-row">
           <NumberField

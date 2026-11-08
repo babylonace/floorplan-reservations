@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   canJoin,
   canStillSeat,
+  DEFAULT_SEATING_RULES,
+  isOneSided,
+  normalizeSides,
+  seatedSidesOnPlan,
   seatingOptions,
   type PlanTable,
   type PlanZone,
@@ -113,9 +117,15 @@ describe("seatingOptions", () => {
   });
 
   it("stops at the most tables a venue allows to join", () => {
-    expect(seatingOptions(5, [row], new Set(["big"]), { maxTablesJoined: 2, joinGap: 5 })).toEqual(
-      [],
-    );
+    expect(
+      seatingOptions(5, [row], new Set(["big"]), { ...DEFAULT_SEATING_RULES, maxTablesJoined: 2 }),
+    ).toEqual([]);
+  });
+
+  it("still accepts rules written before bars existed", () => {
+    expect(
+      seatingOptions(4, [row], new Set(["big"]), { maxTablesJoined: 3, joinGap: 5 }),
+    ).toHaveLength(2);
   });
 
   it("rejects a party size that is not a whole positive number", () => {
@@ -157,5 +167,130 @@ describe("canStillSeat", () => {
 
   it("refuses an empty list", () => {
     expect(canStillSeat(1, [])).toBe(false);
+  });
+});
+
+describe("bars and tables against the wall", () => {
+  // A bar of 8 stools drawn as four stretches of 2, end to end, stools on the bottom side.
+  const stretch = (id: string, x: number, overrides: Partial<PlanTable> = {}) =>
+    table({
+      id,
+      x,
+      y: 300,
+      width: 120,
+      height: 50,
+      minSeats: 1,
+      maxSeats: 2,
+      seatSides: ["bottom"],
+      ...overrides,
+    });
+  const bar = zone("bar", [
+    stretch("b1", 160),
+    stretch("b2", 280),
+    stretch("b3", 400),
+    stretch("b4", 520),
+  ]);
+
+  it("lets a couple take one stretch and leaves the rest of the bar free", () => {
+    const options = seatingOptions(2, [bar]);
+    expect(options.slice(0, 4).map((option) => option.tableIds)).toEqual([
+      ["b1"],
+      ["b2"],
+      ["b3"],
+      ["b4"],
+    ]);
+  });
+
+  it("takes stretches next to each other, in a line, for a group", () => {
+    expect(seatingOptions(4, [bar]).map((option) => option.tableIds)).toEqual([
+      ["b1", "b2"],
+      ["b2", "b3"],
+      ["b3", "b4"],
+    ]);
+    expect(seatingOptions(8, [bar])).toEqual([
+      { zoneId: "bar", tableIds: ["b1", "b2", "b3", "b4"], seats: 8 },
+    ]);
+  });
+
+  it("does not take stretches across a busy one", () => {
+    expect(seatingOptions(4, [bar], new Set(["b2"])).map((option) => option.tableIds)).toEqual([
+      ["b3", "b4"],
+    ]);
+  });
+
+  it("allows longer runs of bar than of tables, up to its own limit", () => {
+    const long = zone(
+      "long",
+      ["s1", "s2", "s3", "s4", "s5", "s6", "s7"].map((id, index) => stretch(id, 160 + index * 120)),
+    );
+    expect(seatingOptions(12, [long])).toHaveLength(2);
+    expect(seatingOptions(13, [long])).toEqual([]);
+    expect(
+      seatingOptions(4, [long], new Set(), { ...DEFAULT_SEATING_RULES, maxBarStretchesJoined: 1 }),
+    ).toEqual([]);
+  });
+
+  it("never joins stretches back to back or facing different ways", () => {
+    // Stools on both sides of a central bar: the two sides are not one group.
+    const front = stretch("front", 160);
+    const back = stretch("back", 160, { y: 250, seatSides: ["top"] });
+    expect(canJoin(front, back, 5)).toBe(false);
+    // Side by side but facing opposite ways.
+    expect(canJoin(front, stretch("other", 280, { seatSides: ["top"] }), 5)).toBe(false);
+  });
+
+  it("only joins stretches whose stools are in a line", () => {
+    expect(canJoin(stretch("a", 160), stretch("b", 280, { y: 303 }), 5)).toBe(true);
+    expect(canJoin(stretch("a", 160), stretch("b", 280, { y: 320 }), 5)).toBe(false);
+  });
+
+  it("follows the stretch's turn: stools on the bottom, turned 90 degrees, face left", () => {
+    const turned = (id: string, y: number) => stretch(id, 300, { y, rotation: 90 });
+    expect(canJoin(turned("a", 200), turned("b", 320), 5)).toBe(true);
+    // A stretch that is not turned, touching its end, has its stools facing another way.
+    expect(canJoin(turned("a", 200), stretch("c", 300, { y: 285 }), 5)).toBe(false);
+  });
+
+  it("never mixes a bar with tables that have seats all around", () => {
+    expect(canJoin(stretch("bar", 160), table({ id: "t", x: 260, y: 300 }), 5)).toBe(false);
+    expect(canJoin(table({ id: "t", x: 260, y: 300 }), stretch("bar", 160), 5)).toBe(false);
+  });
+
+  it("does not push a table against a side that has seats", () => {
+    // Seats on the long top and bottom sides: end to end is fine, along the seats is not.
+    const sides = (id: string, x: number, y: number) =>
+      table({ id, x, y, width: 120, height: 80, maxSeats: 4, seatSides: ["top", "bottom"] });
+    expect(canJoin(sides("a", 100, 100), sides("b", 220, 100), 5)).toBe(true);
+    expect(canJoin(sides("a", 100, 100), sides("b", 100, 180), 5)).toBe(false);
+    // A table with seats all around joins as before.
+    expect(canJoin(table({ id: "a" }), table({ id: "b", y: 180 }), 5)).toBe(true);
+  });
+
+  it("keeps a party at stretches that still stand in a line", () => {
+    expect(canStillSeat(4, [stretch("b1", 160), stretch("b2", 280)])).toBe(true);
+    expect(canStillSeat(4, [stretch("b1", 160), stretch("b2", 280, { seatSides: ["top"] })])).toBe(
+      false,
+    );
+  });
+});
+
+describe("seat sides on the plan", () => {
+  it("turns the sides with the table and ignores round tables", () => {
+    const bar = table({ id: "a", seatSides: ["bottom"] });
+    expect([...(seatedSidesOnPlan(bar) ?? [])]).toEqual(["bottom"]);
+    expect([...(seatedSidesOnPlan({ ...bar, rotation: 90 }) ?? [])]).toEqual(["left"]);
+    expect([...(seatedSidesOnPlan({ ...bar, rotation: 270 }) ?? [])]).toEqual(["right"]);
+    expect(seatedSidesOnPlan({ ...bar, rotation: 45 })).toBeNull();
+    expect(seatedSidesOnPlan({ ...bar, shape: "round" })).toBeNull();
+    expect(seatedSidesOnPlan(table({ id: "b" }))).toBeNull();
+  });
+
+  it("knows a one-sided table and puts sides in order", () => {
+    expect(isOneSided(table({ id: "a", seatSides: ["left"] }))).toBe(true);
+    expect(isOneSided(table({ id: "a", seatSides: ["left", "left"] }))).toBe(true);
+    expect(isOneSided(table({ id: "a", seatSides: ["left", "top"] }))).toBe(false);
+    expect(isOneSided(table({ id: "a" }))).toBe(false);
+    expect(isOneSided(table({ id: "a", shape: "round", seatSides: ["left"] }))).toBe(false);
+    expect(normalizeSides(["left", "top", "left"])).toEqual(["top", "left"]);
   });
 });

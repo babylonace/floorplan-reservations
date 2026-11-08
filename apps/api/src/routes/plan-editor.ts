@@ -1,9 +1,11 @@
 import {
   canStillSeat,
+  normalizeSides,
   validateZone,
   type PlanIssue,
   type PlanTable,
   type PlanZone,
+  type TableSide,
 } from "@floorplan-reservations/engine";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import type { PoolClient } from "pg";
@@ -79,6 +81,17 @@ const tableFields = {
     type: "boolean",
     description: "false keeps the table on the plan but out of online booking.",
   },
+  seatSides: {
+    type: ["array", "null"],
+    items: { type: "string", enum: ["top", "right", "bottom", "left"] },
+    minItems: 1,
+    maxItems: 4,
+    uniqueItems: true,
+    description:
+      "Sides with seats, before the table is turned; null (the default) means all around. " +
+      "Tables are never pushed together along a side with seats, and stretches of bar " +
+      "(one side) are only taken together in a line.",
+  },
 } as const;
 
 const issuesResponse = {
@@ -133,6 +146,7 @@ interface TableBody {
   rotation?: number;
   style?: Record<string, unknown>;
   bookable?: boolean;
+  seatSides?: TableSide[] | null;
 }
 
 interface ZoneRow {
@@ -289,7 +303,8 @@ async function reservationsLeftWithoutRoom(client: PoolClient, edited: ApiTable)
                       'id', t.id, 'zone_id', t.zone_id, 'label', t.label,
                       'min_seats', t.min_seats, 'max_seats', t.max_seats, 'shape', t.shape,
                       'x', t.x, 'y', t.y, 'width', t.width, 'height', t.height,
-                      'rotation', t.rotation, 'style', t.style, 'bookable', t.bookable))
+                      'rotation', t.rotation, 'style', t.style, 'bookable', t.bookable,
+                      'seat_sides', t.seat_sides))
                from reservation_tables all_rt
                join dining_tables t on t.id = all_rt.table_id
               where all_rt.reservation_id = r.id) as tables
@@ -585,6 +600,7 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
             width: body.width,
             height: body.height,
             rotation: body.rotation ?? 0,
+            seatSides: body.seatSides ? normalizeSides(body.seatSides) : null,
           };
           const tables = await zoneTables(client, zone.id);
           if (tables.length >= MAX_TABLES_PER_ZONE) {
@@ -596,8 +612,8 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
           const { rows } = await client.query<TableRow>(
             `insert into dining_tables as t
                (venue_id, zone_id, label, min_seats, max_seats, shape, x, y, width, height,
-                rotation, style, bookable)
-             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                rotation, style, bookable, seat_sides)
+             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
              returning ${TABLE_COLUMNS}`,
             [
               venueId,
@@ -613,6 +629,7 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
               table.rotation,
               body.style ?? {},
               body.bookable ?? true,
+              table.seatSides,
             ],
           );
           const created = rows[0];
@@ -703,6 +720,10 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
             rotation: body.rotation ?? before.rotation,
             style: body.style ?? before.style,
             bookable: body.bookable ?? before.bookable,
+            seatSides:
+              body.seatSides === undefined
+                ? before.seatSides
+                : body.seatSides && normalizeSides(body.seatSides),
           };
 
           // Taking a table out of a zone cannot break that zone, so only the zone it ends up
@@ -731,7 +752,7 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
             `update dining_tables t
                 set zone_id = $2, label = $3, min_seats = $4, max_seats = $5, shape = $6,
                     x = $7, y = $8, width = $9, height = $10, rotation = $11, style = $12,
-                    bookable = $13
+                    bookable = $13, seat_sides = $14
               where t.id = $1
               returning ${TABLE_COLUMNS}`,
             [
@@ -748,6 +769,7 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
               after.rotation,
               after.style,
               after.bookable,
+              after.seatSides,
             ],
           );
           const updated = rows[0];

@@ -1,4 +1,11 @@
-import { boundingBox, type Box, type PlanIssue } from "@floorplan-reservations/engine";
+import {
+  boundingBox,
+  isOneSided,
+  normalizeSides,
+  type Box,
+  type PlanIssue,
+  type TableSide,
+} from "@floorplan-reservations/engine";
 import {
   useEffect,
   useId,
@@ -23,6 +30,7 @@ import {
   SNAP_CM,
   TURN_STEP,
   type Point,
+  shareSeats,
 } from "../plan/geometry";
 
 /**
@@ -428,6 +436,10 @@ export function PlanCanvas(props: PlanCanvasProps) {
               rotation: table.rotation,
               bookable: table.bookable,
               problems: problems.get(table.id) ?? 0,
+              seatedSides:
+                table.shape === "rect" && table.seatSides
+                  ? normalizeSides(table.seatSides).length
+                  : null,
             })}
             bindElement={(element) => {
               props.tableRef(table.id, element);
@@ -606,11 +618,17 @@ function TableShape({
   );
 }
 
-/** Chairs around the table, one per seat, as a drawing aid. They are not part of the checks. */
+/**
+ * Chairs around the table, one per seat, as a drawing aid. They are not part of the checks.
+ * A table that says which sides have seats only gets chairs there, shared out by length; a
+ * table with seats on one side only (a bar, a table by the wall) gets round stools.
+ */
 function Chairs({ table, unit }: { table: Table; unit: number }) {
   const seats = Math.min(table.maxSeats, 16);
   const chair = { w: 34, d: 14, gap: 5 };
+  const stool = { r: 15, gap: 4 };
   const chairs: { x: number; y: number; angle: number }[] = [];
+  const stools = isOneSided(table);
   if (table.shape === "round") {
     const rx = table.width / 2 + chair.gap + chair.d / 2;
     const ry = table.height / 2 + chair.gap + chair.d / 2;
@@ -622,6 +640,26 @@ function Chairs({ table, unit }: { table: Table; unit: number }) {
         angle: (angle * 180) / Math.PI + 90,
       });
     }
+  } else if (table.seatSides) {
+    const sides = normalizeSides(table.seatSides);
+    const across = (side: TableSide) => side === "top" || side === "bottom";
+    const counts = shareSeats(
+      seats,
+      sides.map((side) => (across(side) ? table.width : table.height)),
+    );
+    const out = stools ? stool.gap + stool.r : chair.gap + chair.d / 2;
+    sides.forEach((side, index) => {
+      const count = counts[index] ?? 0;
+      const length = across(side) ? table.width : table.height;
+      const depth = (across(side) ? table.height : table.width) / 2 + out;
+      for (let i = 0; i < count; i++) {
+        const along = -length / 2 + ((i + 0.5) * length) / count;
+        if (side === "top") chairs.push({ x: along, y: -depth, angle: 0 });
+        else if (side === "bottom") chairs.push({ x: along, y: depth, angle: 180 });
+        else if (side === "left") chairs.push({ x: -depth, y: along, angle: 270 });
+        else chairs.push({ x: depth, y: along, angle: 90 });
+      }
+    });
   } else {
     const alongWidth = table.width >= table.height;
     const length = alongWidth ? table.width : table.height;
@@ -643,18 +681,22 @@ function Chairs({ table, unit }: { table: Table; unit: number }) {
     }
   }
   return (
-    <g className="chairs" aria-hidden="true" strokeWidth={unit}>
-      {chairs.map((c, index) => (
-        <rect
-          key={index}
-          x={-chair.w / 2}
-          y={-chair.d / 2}
-          width={chair.w}
-          height={chair.d}
-          rx={chair.d / 2.5}
-          transform={`translate(${String(c.x)} ${String(c.y)}) rotate(${String(c.angle)})`}
-        />
-      ))}
+    <g className={stools ? "chairs stools" : "chairs"} aria-hidden="true" strokeWidth={unit}>
+      {chairs.map((c, index) =>
+        stools ? (
+          <circle key={index} cx={c.x} cy={c.y} r={stool.r} />
+        ) : (
+          <rect
+            key={index}
+            x={-chair.w / 2}
+            y={-chair.d / 2}
+            width={chair.w}
+            height={chair.d}
+            rx={chair.d / 2.5}
+            transform={`translate(${String(c.x)} ${String(c.y)}) rotate(${String(c.angle)})`}
+          />
+        ),
+      )}
     </g>
   );
 }

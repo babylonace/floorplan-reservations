@@ -15,9 +15,11 @@ import {
 } from "../src/plan/draft";
 import {
   findFreeSpot,
+  nextInLine,
   nextLabel,
   normalizeRotation,
   rotationFromHandle,
+  shareSeats,
   sizeFromHandle,
   snap,
   toTableFrame,
@@ -70,6 +72,9 @@ describe("geometry", () => {
   it("numbers new tables after the highest number", () => {
     expect(nextLabel([{ label: "1" }, { label: "7" }, { label: "Bar" }])).toBe("8");
     expect(nextLabel([])).toBe("1");
+    expect(nextLabel([{ label: "B1" }, { label: "b3" }, { label: "4" }], "B")).toBe("B4");
+    expect(nextLabel([{ label: "1" }], "B")).toBe("B1");
+    expect(nextLabel([{ label: "B.1" }, { label: "Bx2" }], "B.")).toBe("B.2");
   });
 });
 
@@ -277,6 +282,7 @@ describe("saving", () => {
           rotation: 0,
           style: {},
           bookable: true,
+          seatSides: null,
         },
       },
     ]);
@@ -301,5 +307,43 @@ describe("metres", () => {
     for (const text of ["", " ", "m", "abc", "1,2,3", "1.200,5", "1 2", "1e3", ",", "--1"]) {
       expect(parseMetres(text)).toBeNull();
     }
+  });
+});
+
+describe("bars", () => {
+  const zoneSize = { width: 1000, height: 600 };
+  const section = table({
+    id: "b1",
+    x: 200,
+    y: 500,
+    width: 120,
+    height: 50,
+    seatSides: ["bottom"],
+  });
+
+  it("puts the next section of a bar straight after the selected one", () => {
+    expect(nextInLine(section, zoneSize, [section])).toEqual({ x: 320, y: 500 });
+  });
+
+  it("tries the other end when the far end is taken, and gives up when both are", () => {
+    const blocker = table({ id: "x", x: 340, y: 500 });
+    expect(nextInLine(section, zoneSize, [section, blocker])).toEqual({ x: 80, y: 500 });
+    const other = table({ id: "y", x: 60, y: 500 });
+    expect(nextInLine(section, zoneSize, [section, blocker, other])).toBeNull();
+  });
+
+  it("follows the section's turn and stays inside the zone", () => {
+    const turned = { ...section, x: 500, y: 200, rotation: 90 };
+    expect(nextInLine(turned, zoneSize, [turned])).toEqual({ x: 500, y: 320 });
+    const atTheEdge = { ...section, x: 940 };
+    expect(nextInLine(atTheEdge, zoneSize, [atTheEdge])).toEqual({ x: 820, y: 500 });
+  });
+
+  it("shares seats out over the sides by their length", () => {
+    expect(shareSeats(2, [120])).toEqual([2]);
+    expect(shareSeats(6, [120, 80, 120])).toEqual([2, 2, 2]);
+    expect(shareSeats(5, [200, 100])).toEqual([3, 2]);
+    expect(shareSeats(3, [100, 100])).toEqual([2, 1]);
+    expect(shareSeats(4, [])).toEqual([]);
   });
 });

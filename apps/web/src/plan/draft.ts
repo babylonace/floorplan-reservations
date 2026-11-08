@@ -54,6 +54,7 @@ const FIELDS = [
   "rotation",
   "style",
   "bookable",
+  "seatSides",
 ] as const satisfies readonly (keyof TableFields)[];
 
 /** The fields of `current` that differ from `saved`: what a PATCH has to send. */
@@ -63,7 +64,9 @@ export function changedFields(saved: Table, current: Table): Partial<TableFields
     const before = saved[field];
     const after = current[field];
     const same =
-      field === "style" ? JSON.stringify(before) === JSON.stringify(after) : before === after;
+      field === "style" || field === "seatSides"
+        ? JSON.stringify(before) === JSON.stringify(after)
+        : before === after;
     if (!same) Object.assign(fields, { [field]: after });
   }
   return fields;
@@ -82,6 +85,7 @@ function creationFields(table: Table): Omit<TableFields, "zoneId"> {
     rotation: table.rotation,
     style: table.style,
     bookable: table.bookable,
+    seatSides: table.seatSides,
   };
 }
 

@@ -152,6 +152,64 @@ describe("the plan editor", () => {
     expect(updateTable).toHaveBeenCalledExactlyOnceWith("test-venue", "t1", { width: 150 });
   });
 
+  it("adds a bar section by section, in a line, and saves which side has stools", async () => {
+    const user = userEvent.setup();
+    const createTable = vi.fn<Api["createTable"]>((_slug, zoneId, fields) =>
+      Promise.resolve({ ...fields, id: `stored-${fields.label}`, zoneId }),
+    );
+    renderApp(signedInApi({ createTable }, []));
+
+    await user.click(await screen.findByRole("button", { name: "Añadir tramo de barra" }));
+    const first = await screen.findByRole("button", { name: /^Mesa B1,/ });
+    expect(first).toHaveFocus();
+    expect(first).toHaveAccessibleName(/asientos en un solo lado/);
+    expect(screen.getByText(/Tramo de barra: se puede reservar un tramo solo/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Abajo")).toBeChecked();
+    expect(screen.getByLabelText("Abajo")).toBeDisabled();
+    const leftOf = () =>
+      Number(screen.getByLabelText<HTMLInputElement>("Desde la izquierda").value.replace(",", "."));
+    const firstX = leftOf();
+
+    // With B1 selected, the next section carries the bar on, right after it.
+    await user.click(screen.getByRole("button", { name: "Añadir tramo de barra" }));
+    expect(await screen.findByRole("button", { name: /^Mesa B2,/ })).toHaveFocus();
+    expect(screen.getByText("Tramo de barra B2 añadido tras B1.")).toBeInTheDocument();
+    expect(leftOf() - firstX).toBeCloseTo(1.2);
+    expect(screen.getByText("Sin problemas")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    expect(await screen.findByText("2 cambios guardados.")).toBeInTheDocument();
+    expect(createTable).toHaveBeenCalledWith(
+      "test-venue",
+      "zone-1",
+      expect.objectContaining({ label: "B2", seatSides: ["bottom"], width: 120, height: 50 }),
+    );
+  });
+
+  it("chooses the sides of a table that have seats", async () => {
+    const user = userEvent.setup();
+    const updateTable = vi.fn<Api["updateTable"]>((_slug, id, fields) =>
+      Promise.resolve({ ...table({ id, label: "1", x: 100, y: 100 }), ...fields }),
+    );
+    renderApp(signedInApi({ updateTable }));
+    await focusTable("1");
+    expect(screen.getByLabelText("Alrededor")).toBeChecked();
+    expect(screen.queryByLabelText("Arriba")).not.toBeInTheDocument();
+
+    // Choosing sides starts from the long sides, where the chairs already were.
+    await user.click(screen.getByLabelText("En algunos lados"));
+    expect(screen.getByLabelText("Arriba")).toBeChecked();
+    expect(screen.getByLabelText("Abajo")).toBeChecked();
+    expect(screen.getByLabelText("Izquierda")).not.toBeChecked();
+    await user.click(screen.getByLabelText("Abajo"));
+    expect(screen.getByLabelText("Arriba")).toBeDisabled();
+    expect(await findTable("1")).toHaveAccessibleName(/asientos en un solo lado/);
+
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    expect(await screen.findByText("Cambio guardado.")).toBeInTheDocument();
+    expect(updateTable).toHaveBeenCalledExactlyOnceWith("test-venue", "t1", { seatSides: ["top"] });
+  });
+
   it("turns a table with R and removes it with Delete", async () => {
     const user = userEvent.setup();
     renderApp(signedInApi());
