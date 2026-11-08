@@ -134,6 +134,9 @@ describe("the plan editor", () => {
     await user.clear(width);
     await user.type(width, "ancho");
     expect(width).toHaveAttribute("aria-invalid", "true");
+    expect(width).toHaveAccessibleDescription(
+      "Escribe una medida entre 0,3 m y 1000 m, como 1,2. Al salir del campo se queda la última buena.",
+    );
     await user.tab();
     expect(width).toHaveValue("1,5");
     expect(depth).toHaveValue("0,75");
@@ -279,6 +282,42 @@ describe("the plan editor", () => {
       within(screen.getByRole("dialog")).getByRole("button", { name: "Descartar cambios" }),
     );
     expect(screen.getByText("Todo guardado")).toBeInTheDocument();
+  });
+
+  it("does not show the message of a save that ends after moving to another zone", async () => {
+    const user = userEvent.setup();
+    let finish: (() => void) | undefined;
+    const updateTable = vi.fn<Api["updateTable"]>(
+      (_slug, id, fields) =>
+        new Promise((resolve) => {
+          finish = () => {
+            resolve({ ...table({ id, label: "1", x: 100, y: 100 }), ...fields });
+          };
+        }),
+    );
+    const plan = floorPlan([
+      zone(TABLES),
+      zone([], { id: "zone-2", name: "Terraza", sortOrder: 1 }),
+    ]);
+    renderApp(signedInApi({ updateTable, floorPlan: vi.fn(() => Promise.resolve(plan)) }));
+
+    await focusTable("1");
+    await user.keyboard("{ArrowDown}");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    await user.click(screen.getByRole("button", { name: "Terraza" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Descartar cambios" }),
+    );
+    expect(screen.getByRole("button", { name: "Terraza" })).toHaveAttribute("aria-current", "true");
+
+    await act(async () => {
+      finish?.();
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(updateTable).toHaveBeenCalledOnce();
+    });
+    expect(screen.queryByText("Cambio guardado.")).not.toBeInTheDocument();
   });
 
   it("asks to sign in again when the session ends, and keeps what was not saved", async () => {

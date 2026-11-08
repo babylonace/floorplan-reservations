@@ -75,6 +75,8 @@ function NoticeBox({ notice, onClose }: { notice: NoticeMessage; onClose: () => 
   const { t } = useI18n();
   const [pointer, setPointer] = useState(false);
   const [focus, setFocus] = useState(false);
+  /** Where the keyboard was before it came to the message, to go back there on closing. */
+  const cameFrom = useRef<HTMLElement | null>(null);
   const close = useRef(onClose);
   useEffect(() => {
     close.current = onClose;
@@ -100,8 +102,12 @@ function NoticeBox({ notice, onClose }: { notice: NoticeMessage; onClose: () => 
       onPointerLeave={() => {
         setPointer(false);
       }}
-      onFocus={() => {
+      onFocus={(event) => {
         setFocus(true);
+        const from = event.relatedTarget;
+        if (from instanceof HTMLElement && !event.currentTarget.contains(from)) {
+          cameFrom.current = from;
+        }
       }}
       onBlur={() => {
         setFocus(false);
@@ -117,7 +123,17 @@ function NoticeBox({ notice, onClose }: { notice: NoticeMessage; onClose: () => 
           </ul>
         )}
       </div>
-      <button type="button" className="icon-button" onClick={onClose} aria-label={t.errors.dismiss}>
+      <button
+        type="button"
+        className="icon-button"
+        onClick={() => {
+          const back = cameFrom.current;
+          onClose();
+          if (back?.isConnected) back.focus();
+          else document.querySelector<HTMLElement>("main")?.focus();
+        }}
+        aria-label={t.errors.dismiss}
+      >
         <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
           <path d="M4 4l8 8M12 4l-8 8" />
         </svg>
@@ -328,7 +344,7 @@ export function MetreField({
   hint?: string;
   onChange: (value: number) => void;
 }) {
-  const { format } = useI18n();
+  const { t, format } = useI18n();
   const id = useId();
   const [text, setText] = useState(() => format.metresField(value));
   const [focused, setFocused] = useState(false);
@@ -353,7 +369,9 @@ export function MetreField({
         value={shown}
         disabled={disabled}
         aria-invalid={invalid || undefined}
-        aria-describedby={hint ? `${id}-hint` : undefined}
+        aria-describedby={
+          [hint && `${id}-hint`, invalid && `${id}-error`].filter(Boolean).join(" ") || undefined
+        }
         onFocus={() => {
           setText(format.metresField(value));
           setFocused(true);
@@ -378,6 +396,11 @@ export function MetreField({
       {hint && (
         <p id={`${id}-hint`} className="field-hint">
           {hint}
+        </p>
+      )}
+      {invalid && (
+        <p id={`${id}-error`} className="field-error">
+          {t.errors.metres(format.meters(min), format.meters(max))}
         </p>
       )}
     </div>

@@ -670,6 +670,13 @@ fieldset {
   pointer-events: none;
 }
 
+/* Under the panel on narrow screens: room at the bottom so the message never hides the end. */
+@media (max-width: 900px) {
+  .workspace:has(.notice) {
+    padding-bottom: 8rem;
+  }
+}
+
 @media (min-width: 901px) {
   .notice-area {
     width: min(30rem, calc(100vw - var(--panel-width) - 1.5rem));

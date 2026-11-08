@@ -215,6 +215,8 @@ export const en = {
     zoneInvalid: "The zone cannot be that small, because:",
     rejected: "the server did not accept one of the values. Check the fields and try again.",
     dismiss: "Close message",
+    metres: (min: string, max: string) =>
+      `Type a length between ${min} and ${max}, such as 1.2. Leaving the field keeps the last good one.`,
   },
   dialog: {
     cancel: "Cancel",

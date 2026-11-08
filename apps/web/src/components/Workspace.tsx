@@ -201,6 +201,9 @@ export function Workspace({
           </div>
         </header>
 
+        {/* Fixed at the bottom of the window, but next in keyboard order after the header. */}
+        <NoticeArea notice={notice} onClose={closeNotice} />
+
         {!venue ? (
           <main className="empty-state">
             <p>{t.venues.none}</p>
@@ -345,8 +348,6 @@ export function Workspace({
             }}
           />
         )}
-
-        <NoticeArea notice={notice} onClose={closeNotice} />
       </div>
     </NoticeContext.Provider>
   );

@@ -201,6 +201,8 @@ export const es: DeepPartial<Messages> = {
     zoneInvalid: "La zona no puede ser tan pequeña, porque:",
     rejected: "el servidor no aceptó uno de los datos. Revisa los campos y vuelve a probar.",
     dismiss: "Cerrar aviso",
+    metres: (min: string, max: string) =>
+      `Escribe una medida entre ${min} y ${max}, como 1,2. Al salir del campo se queda la última buena.`,
   },
   dialog: {
     cancel: "Cancelar",

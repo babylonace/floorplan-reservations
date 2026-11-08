@@ -22,7 +22,7 @@ import { findFreeSpot, nextLabel } from "../plan/geometry";
 import { saveChanges } from "../plan/save";
 import { PlanCanvas } from "./PlanCanvas";
 import { TableInspector } from "./TableInspector";
-import { ButtonLabel, ConfirmDialog, useNotice } from "./ui";
+import { ButtonLabel, ConfirmDialog, useNotice, type NoticeMessage } from "./ui";
 import { ZonePanel } from "./ZonePanel";
 
 export interface EditorProps {
@@ -65,7 +65,18 @@ export function Editor({
   const [draft, setDraft] = useState<Draft>(() => draftFromZone(zone));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const setNotice = useNotice();
+  const showNotice = useNotice();
+  // A save can finish after the person moved to another zone; its message must not show there.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const setNotice = (notice: NoticeMessage | null) => {
+    if (mounted.current) showNotice(notice);
+  };
   const [announcement, setAnnouncement] = useState("");
   const [confirming, setConfirming] = useState<"discard" | "deleteZone" | null>(null);
   const tableElements = useRef(new Map<string, SVGGElement>());
