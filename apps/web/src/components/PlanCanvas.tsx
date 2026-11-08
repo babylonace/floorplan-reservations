@@ -220,14 +220,16 @@ export function PlanCanvas(props: PlanCanvasProps) {
     const table = byId.get(active.id);
     if (!table) return;
     if (active.kind === "move" && (table.x !== active.start.x || table.y !== active.start.y)) {
-      onAnnounce(t.announce.moved(table.label, format.cm(table.x), format.cm(table.y)));
+      onAnnounce(t.announce.moved(table.label, format.meters(table.x), format.meters(table.y)));
     } else if (active.kind === "rotate" && table.rotation !== active.start.rotation) {
       onAnnounce(t.announce.rotated(table.label, table.rotation));
     } else if (
       active.kind === "resize" &&
       (table.width !== active.start.width || table.height !== active.start.height)
     ) {
-      onAnnounce(t.announce.resized(table.label, format.cm(table.width), format.cm(table.height)));
+      onAnnounce(
+        t.announce.resized(table.label, format.meters(table.width), format.meters(table.height)),
+      );
     }
   }
 
@@ -265,7 +267,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
       const y = clamp(table.y + move.y, -MAX_CM, MAX_CM);
       onSelect(table.id);
       onChange(table.id, { x, y });
-      onAnnounce(t.announce.moved(table.label, format.cm(x), format.cm(y)));
+      onAnnounce(t.announce.moved(table.label, format.meters(x), format.meters(y)));
     } else if (event.key.toLowerCase() === "r" && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
       const rotation = normalizeRotation(
@@ -421,8 +423,8 @@ export function PlanCanvas(props: PlanCanvasProps) {
               round: table.shape === "round",
               minSeats: table.minSeats,
               maxSeats: table.maxSeats,
-              x: format.cm(table.x),
-              y: format.cm(table.y),
+              x: format.meters(table.x),
+              y: format.meters(table.y),
               rotation: table.rotation,
               bookable: table.bookable,
               problems: problems.get(table.id) ?? 0,

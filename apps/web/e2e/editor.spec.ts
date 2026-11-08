@@ -32,6 +32,9 @@ async function signIn(page: Page, account: { email: string; password: string }) 
   await expect(page.getByRole("button", { name: "Comedor" })).toBeVisible();
 }
 
+/** A metre field's text ("4,5" in Spanish) as a number. */
+const metres = (text: string) => Number(text.replace(",", "."));
+
 const tableButton = (page: Page, label: string) =>
   page.getByRole("button", { name: new RegExp(`^Mesa ${label},`) });
 
@@ -78,13 +81,17 @@ test("moves a table with the keyboard and keeps it there after a reload", async 
   await table.focus();
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("Shift+ArrowRight");
-  await expect(page.getByLabel("Desde la izquierda (cm)")).toHaveValue("555");
+  await expect(page.getByLabel("Desde la izquierda")).toHaveValue("5,55");
+  // The top bar stays short, and the message after saving floats: the plan does not move.
+  expect((await page.locator(".app-header").boundingBox())?.height).toBeLessThanOrEqual(48);
+  const before = await page.locator(".canvas-wrap").boundingBox();
   await page.getByRole("button", { name: "Guardar cambios" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Cambio guardado." })).toBeVisible();
+  expect(await page.locator(".canvas-wrap").boundingBox()).toEqual(before);
 
   await page.reload();
   await tableButton(page, "3").focus();
-  await expect(page.getByLabel("Desde la izquierda (cm)")).toHaveValue("555");
+  await expect(page.getByLabel("Desde la izquierda")).toHaveValue("5,55");
 });
 
 test("adds, drags, turns and resizes a table with the mouse", async ({ page }) => {
@@ -101,8 +108,8 @@ test("adds, drags, turns and resizes a table with the mouse", async ({ page }) =
   await page.mouse.down();
   await page.mouse.move(centre.x, centre.y + 250, { steps: 8 });
   await page.mouse.up();
-  const y = Number(await page.getByLabel("Desde arriba (cm)").inputValue());
-  expect(y).toBeGreaterThan(400);
+  const y = metres(await page.getByLabel("Desde arriba").inputValue());
+  expect(y).toBeGreaterThan(4);
   await expect(page.getByText("Sin problemas", { exact: true })).toBeVisible();
 
   // Make it rectangular, then pull the corner handle out to resize it.
@@ -117,8 +124,8 @@ test("adds, drags, turns and resizes a table with the mouse", async ({ page }) =
   await page.mouse.down();
   await page.mouse.move(corner.x + 40, corner.y + 12, { steps: 6 });
   await page.mouse.up();
-  const width = Number(await page.getByLabel("Ancho (cm)").inputValue());
-  expect(width).toBeGreaterThan(90);
+  const width = metres(await page.getByLabel("Ancho (m)").inputValue());
+  expect(width).toBeGreaterThan(0.9);
 
   // Turn it with the round handle above it: dragging to its right turns it a quarter.
   await added.focus();
@@ -178,8 +185,8 @@ test("creates, renames and deletes a zone", async ({ page }) => {
   await page.getByRole("button", { name: "Nueva zona" }).click();
   const dialog = page.getByRole("dialog", { name: "Nueva zona" });
   await dialog.getByLabel("Nombre").fill("Patio");
-  await dialog.getByLabel("Ancho (cm)").fill("600");
-  await dialog.getByLabel("Fondo (cm)").fill("450");
+  await dialog.getByLabel("Ancho (m)").fill("6");
+  await dialog.getByLabel("Fondo (m)").fill("4,5");
   await dialog.getByRole("button", { name: "Crear zona" }).click();
   await expect(page.getByText("Zona «Patio» creada.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Patio" })).toHaveAttribute("aria-current", "true");
@@ -202,7 +209,7 @@ test("lets staff look without changing anything, in English too", async ({ page 
   await expect(page.getByRole("button", { name: "Añadir mesa rectangular" })).toHaveCount(0);
   await tableButton(page, "1").focus();
   await page.keyboard.press("ArrowRight");
-  await expect(page.getByLabel("Desde la izquierda (cm)")).toBeDisabled();
+  await expect(page.getByLabel("Desde la izquierda")).toBeDisabled();
 
   await page.getByRole("button", { name: "English" }).click();
   await expect(page.getByText("You can look at the floor plan.")).toBeVisible();

@@ -1,4 +1,15 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
+import { clamp } from "../plan/geometry";
+import { parseMetres } from "../plan/units";
 import { LOCALE_NAMES, LOCALES, useI18n } from "../i18n/i18n";
 
 /** Small building blocks shared by the screens. */
@@ -9,13 +20,92 @@ export interface NoticeMessage {
   details?: string[];
 }
 
-/** A message above the plan. Errors are announced at once; good news waits its turn. */
-export function Notice({ notice, onClose }: { notice: NoticeMessage; onClose: () => void }) {
+/** How long good news stays on screen. Errors stay until they are closed. */
+export const NOTICE_SECONDS = 6;
+
+/** Shows a message in the notice area, or clears it with null. One message at a time. */
+export const NoticeContext = createContext<(notice: NoticeMessage | null) => void>(() => {
+  // Without a provider (a component on its own in a test) messages go nowhere.
+});
+
+export function useNotice(): (notice: NoticeMessage | null) => void {
+  return useContext(NoticeContext);
+}
+
+/**
+ * The messages after an action, floating over the bottom of the window so nothing on the page
+ * moves when one appears. Both live regions are always in the page, so screen readers hear what
+ * is put in them: errors at once, good news when they are free. Good news closes on its own
+ * after a few seconds, but not while the pointer or the keyboard is on it.
+ */
+export function NoticeArea({
+  notice,
+  onClose,
+}: {
+  notice: NoticeMessage | null;
+  onClose: () => void;
+}) {
+  // A new message is a new box, even with the same words, so its timer starts again.
+  const key = notice ? noticeKey(notice) : 0;
+  return (
+    <div className="notice-area">
+      <div role="status" className="notice-slot">
+        {notice?.tone === "success" && <NoticeBox key={key} notice={notice} onClose={onClose} />}
+      </div>
+      <div role="alert" className="notice-slot">
+        {notice?.tone === "error" && <NoticeBox key={key} notice={notice} onClose={onClose} />}
+      </div>
+    </div>
+  );
+}
+
+const noticeKeys = new WeakMap<NoticeMessage, number>();
+let lastNoticeKey = 0;
+
+function noticeKey(notice: NoticeMessage): number {
+  let key = noticeKeys.get(notice);
+  if (key === undefined) {
+    key = ++lastNoticeKey;
+    noticeKeys.set(notice, key);
+  }
+  return key;
+}
+
+function NoticeBox({ notice, onClose }: { notice: NoticeMessage; onClose: () => void }) {
   const { t } = useI18n();
+  const [pointer, setPointer] = useState(false);
+  const [focus, setFocus] = useState(false);
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  });
+  const autoClose = notice.tone === "success" && !pointer && !focus;
+
+  useEffect(() => {
+    if (!autoClose) return;
+    const timer = window.setTimeout(() => {
+      close.current();
+    }, NOTICE_SECONDS * 1000);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [autoClose]);
+
   return (
     <div
       className={`notice notice-${notice.tone}`}
-      role={notice.tone === "error" ? "alert" : "status"}
+      onPointerEnter={() => {
+        setPointer(true);
+      }}
+      onPointerLeave={() => {
+        setPointer(false);
+      }}
+      onFocus={() => {
+        setFocus(true);
+      }}
+      onBlur={() => {
+        setFocus(false);
+      }}
     >
       <div className="notice-body">
         <p>{notice.text}</p>
@@ -209,6 +299,106 @@ export function NumberField({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * A length, shown and typed in metres and kept in whole centimetres. A comma or a point both
+ * work as the decimal mark. The arrow keys step it like a number field. What is typed shows as
+ * typed; the value only changes once it is a length within the limits, and leaving the field
+ * puts back the last good value.
+ */
+export function MetreField({
+  label,
+  value,
+  min,
+  max,
+  step = 5,
+  disabled = false,
+  hint,
+  onChange,
+}: {
+  label: string;
+  /** Centimetres, like `min`, `max` and `step`. */
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  disabled?: boolean;
+  hint?: string;
+  onChange: (value: number) => void;
+}) {
+  const { format } = useI18n();
+  const id = useId();
+  const [text, setText] = useState(() => format.metresField(value));
+  const [focused, setFocused] = useState(false);
+  const shown = focused ? text : format.metresField(value);
+  const typed = parseMetres(shown);
+  const invalid = focused && (typed === null || typed < min || typed > max);
+
+  function commit(next: number) {
+    setText(format.metresField(next));
+    onChange(next);
+  }
+
+  return (
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      <input
+        id={id}
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        spellCheck={false}
+        value={shown}
+        disabled={disabled}
+        aria-invalid={invalid || undefined}
+        aria-describedby={hint ? `${id}-hint` : undefined}
+        onFocus={() => {
+          setText(format.metresField(value));
+          setFocused(true);
+        }}
+        onBlur={() => {
+          setFocused(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+          event.preventDefault();
+          const base = typed ?? value;
+          const direction = event.key === "ArrowUp" ? 1 : -1;
+          const amount = event.shiftKey ? step * 10 : step;
+          commit(clamp(Math.round(base / step) * step + direction * amount, min, max));
+        }}
+        onChange={(event) => {
+          setText(event.target.value);
+          const next = parseMetres(event.target.value);
+          if (next !== null && next >= min && next <= max) onChange(next);
+        }}
+      />
+      {hint && (
+        <p id={`${id}-hint`} className="field-hint">
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A button's words, with a shorter version for narrow screens. Screen readers and voice control
+ * always get the full words, which contain the short ones. Without `short`, narrow screens show
+ * only the button's icon.
+ */
+export function ButtonLabel({ full, short }: { full: string; short?: string }) {
+  return (
+    <>
+      <span className="label-full">{full}</span>
+      {short && (
+        <span className="label-short" aria-hidden="true">
+          {short}
+        </span>
+      )}
+    </>
   );
 }
 

@@ -104,14 +104,49 @@ describe("the plan editor", () => {
     expect(first).toHaveAttribute("aria-pressed", "true");
     await user.keyboard("{ArrowRight}{ArrowRight}{Shift>}{ArrowDown}{/Shift}");
 
-    expect(screen.getByLabelText("Desde la izquierda (cm)")).toHaveValue(110);
-    expect(screen.getByLabelText("Desde arriba (cm)")).toHaveValue(150);
+    expect(screen.getByLabelText("Desde la izquierda")).toHaveValue("1,1");
+    expect(screen.getByLabelText("Desde arriba")).toHaveValue("1,5");
     expect(screen.getByText("1 cambio sin guardar")).toBeInTheDocument();
-    expect(screen.getByText("Mesa 1 en 110, 150 cm.")).toBeInTheDocument();
+    expect(screen.getByText("Mesa 1 en 1,1 m, 1,5 m.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
     expect(await screen.findByText("Cambio guardado.")).toBeInTheDocument();
     expect(updateTable).toHaveBeenCalledExactlyOnceWith("test-venue", "t1", { x: 110, y: 150 });
+  });
+
+  it("takes sizes in metres, with a comma or a point, and keeps centimetres for the API", async () => {
+    const user = userEvent.setup();
+    const updateTable = vi.fn<Api["updateTable"]>((_slug, id, fields) =>
+      Promise.resolve({ ...table({ id, label: "1", x: 100, y: 100 }), ...fields }),
+    );
+    renderApp(signedInApi({ updateTable }));
+
+    await focusTable("1");
+    const width = screen.getByLabelText("Ancho (m)");
+    expect(width).toHaveValue("0,8");
+    await user.clear(width);
+    await user.type(width, "1,5");
+    const depth = screen.getByLabelText("Fondo (m)");
+    await user.clear(depth);
+    await user.type(depth, "0.75");
+
+    // Something that is not a length is marked, and leaving the field puts the last good one back.
+    await user.clear(width);
+    await user.type(width, "ancho");
+    expect(width).toHaveAttribute("aria-invalid", "true");
+    await user.tab();
+    expect(width).toHaveValue("1,5");
+    expect(depth).toHaveValue("0,75");
+
+    // The arrow keys step it by 5 cm, like a number field.
+    await user.click(depth);
+    await user.keyboard("{ArrowUp}");
+    expect(depth).toHaveValue("0,8");
+
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    expect(await screen.findByText("Cambio guardado.")).toBeInTheDocument();
+    // The depth went back to where it was, so only the width is sent.
+    expect(updateTable).toHaveBeenCalledExactlyOnceWith("test-venue", "t1", { width: 150 });
   });
 
   it("turns a table with R and removes it with Delete", async () => {
@@ -315,9 +350,9 @@ describe("the plan editor", () => {
     await user.click(await screen.findByRole("button", { name: "Nueva zona" }));
     const dialog = screen.getByRole("dialog", { name: "Nueva zona" });
     await user.type(within(dialog).getByLabelText("Nombre"), "Terraza");
-    const width = within(dialog).getByLabelText("Ancho (cm)");
+    const width = within(dialog).getByLabelText("Ancho (m)");
     await user.clear(width);
-    await user.type(width, "900");
+    await user.type(width, "9");
     await user.click(within(dialog).getByRole("button", { name: "Crear zona" }));
 
     expect(await screen.findByText("Zona «Terraza» creada.")).toBeInTheDocument();
@@ -370,8 +405,8 @@ describe("the plan editor", () => {
     ).not.toBeInTheDocument();
     await focusTable("1");
     await user.keyboard("{ArrowRight}");
-    expect(screen.getByLabelText("Desde la izquierda (cm)")).toHaveValue(100);
-    expect(screen.getByLabelText("Desde la izquierda (cm)")).toBeDisabled();
+    expect(screen.getByLabelText("Desde la izquierda")).toHaveValue("1");
+    expect(screen.getByLabelText("Desde la izquierda")).toBeDisabled();
   });
 
   it("offers to try again when the plan cannot be loaded", async () => {
@@ -381,7 +416,10 @@ describe("the plan editor", () => {
       .mockRejectedValueOnce(new ApiError(0, "offline"))
       .mockResolvedValue(floorPlan([zone(TABLES)]));
     renderApp(signedInApi({ floorPlan: plans }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo cargar el plano.");
+    // The empty message area is an alert too, so find the one that says something.
+    expect(
+      (await screen.findByText(/No se pudo cargar el plano\./)).closest('[role="alert"]'),
+    ).not.toBeNull();
     await user.click(screen.getByRole("button", { name: "Volver a probar" }));
     await waitFor(async () => {
       expect(await findTable("1")).toBeInTheDocument();

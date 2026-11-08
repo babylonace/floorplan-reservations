@@ -50,3 +50,12 @@ test.describe("on a tablet", () => {
     await page.screenshot({ path: `${folder}editor-tablet.png` });
   });
 });
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });
+
+  test("editor on a phone, with the short top rows", async ({ page }) => {
+    await signIn(page);
+    await page.screenshot({ path: `${folder}editor-phone.png` });
+  });
+});

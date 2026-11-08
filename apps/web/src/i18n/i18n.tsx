@@ -72,9 +72,12 @@ export function formatterFor(locale: Locale) {
   const tag = locale === "es" ? "es-ES" : "en-GB";
   const whole = new Intl.NumberFormat(tag, { maximumFractionDigits: 0 });
   const metres = new Intl.NumberFormat(tag, { maximumFractionDigits: 2 });
+  const field = new Intl.NumberFormat(tag, { maximumFractionDigits: 2, useGrouping: false });
   return {
     cm: (value: number) => whole.format(value),
     meters: (cm: number) => `${metres.format(cm / 100)} m`,
+    /** Centimetres as metres in a field: no unit and no thousands separator. */
+    metresField: (cm: number) => field.format(cm / 100),
   };
 }
 

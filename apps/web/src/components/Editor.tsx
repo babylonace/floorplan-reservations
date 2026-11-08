@@ -22,7 +22,7 @@ import { findFreeSpot, nextLabel } from "../plan/geometry";
 import { saveChanges } from "../plan/save";
 import { PlanCanvas } from "./PlanCanvas";
 import { TableInspector } from "./TableInspector";
-import { ConfirmDialog, Notice, type NoticeMessage } from "./ui";
+import { ButtonLabel, ConfirmDialog, useNotice } from "./ui";
 import { ZonePanel } from "./ZonePanel";
 
 export interface EditorProps {
@@ -65,7 +65,7 @@ export function Editor({
   const [draft, setDraft] = useState<Draft>(() => draftFromZone(zone));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<NoticeMessage | null>(null);
+  const setNotice = useNotice();
   const [announcement, setAnnouncement] = useState("");
   const [confirming, setConfirming] = useState<"discard" | "deleteZone" | null>(null);
   const tableElements = useRef(new Map<string, SVGGElement>());
@@ -254,9 +254,10 @@ export function Editor({
               }}
             >
               <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                <rect x="3" y="5" width="14" height="10" rx="1.5" />
+                <rect x="1.5" y="6" width="11" height="8" rx="1.5" />
+                <path d="M16 6v6M13 9h6" />
               </svg>
-              {t.tables.addRect}
+              <ButtonLabel full={t.tables.addRect} short={t.tables.addRectShort} />
             </button>
             <button
               type="button"
@@ -267,9 +268,10 @@ export function Editor({
               }}
             >
               <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                <circle cx="10" cy="10" r="7" />
+                <circle cx="7" cy="10" r="5.5" />
+                <path d="M16 6v6M13 9h6" />
               </svg>
-              {t.tables.addRound}
+              <ButtonLabel full={t.tables.addRound} short={t.tables.addRoundShort} />
             </button>
           </div>
         )}
@@ -288,37 +290,34 @@ export function Editor({
                     ? t.save.unsaved(changes.length)
                     : t.save.allSaved}
               </span>
-              <button
-                type="button"
-                className="button"
-                disabled={!canEdit || changes.length === 0}
-                onClick={() => {
-                  setConfirming("discard");
-                }}
-              >
-                {t.save.discard}
-              </button>
-              <button
-                type="button"
-                className="button button-primary"
-                disabled={!canEdit || changes.length === 0 || labelsMissing}
-                onClick={() => void save()}
-              >
-                {busy ? t.save.saving : t.save.save}
-              </button>
+              <span className="save-actions">
+                <button
+                  type="button"
+                  className="button"
+                  disabled={!canEdit || changes.length === 0}
+                  onClick={() => {
+                    setConfirming("discard");
+                  }}
+                >
+                  <ButtonLabel full={t.save.discard} short={t.save.discardShort} />
+                </button>
+                <button
+                  type="button"
+                  className="button button-primary"
+                  disabled={!canEdit || changes.length === 0 || labelsMissing}
+                  onClick={() => void save()}
+                >
+                  {busy ? (
+                    t.save.saving
+                  ) : (
+                    <ButtonLabel full={t.save.save} short={t.save.saveShort} />
+                  )}
+                </button>
+              </span>
             </>
           )}
         </div>
       </div>
-
-      {notice && (
-        <Notice
-          notice={notice}
-          onClose={() => {
-            setNotice(null);
-          }}
-        />
-      )}
 
       <div className="editor-body">
         <div
