@@ -130,7 +130,7 @@ describe("GET /venues/:slug/floor-plan", () => {
 });
 
 describe("GET /openapi.json", () => {
-  it("describes the public routes", async () => {
+  it("describes every route", async () => {
     const response = await app.inject({ method: "GET", url: "/openapi.json" });
     expect(response.statusCode).toBe(200);
 
@@ -140,6 +140,10 @@ describe("GET /openapi.json", () => {
       "/health",
       "/venues/{slug}/floor-plan",
       "/venues/{slug}/reservations",
+      "/venues/{slug}/tables/{tableId}",
+      "/venues/{slug}/zones",
+      "/venues/{slug}/zones/{zoneId}",
+      "/venues/{slug}/zones/{zoneId}/tables",
     ]);
   });
 });

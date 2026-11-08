@@ -4,7 +4,7 @@ Reservas de mesa para restaurantes: el local dibuja su propio plano y el motor d
 
 [Read in English](README.md)
 
-> **Estado: muy al principio.** La fase 1 está hecha: la API ya acepta reservas y la base de datos rechaza las reservas dobles. Todavía no hay editor del plano, página de reserva ni panel del local. Mira la [hoja de ruta](#hoja-de-ruta).
+> **Estado: muy al principio.** La API ya acepta reservas, la base de datos rechaza las reservas dobles y el local puede editar su plano a través de la API. Todavía no hay inicio de sesión, pantalla para dibujar, página de reserva ni panel del local. Mira la [hoja de ruta](#hoja-de-ruta).
 
 ## Por qué
 
@@ -25,9 +25,11 @@ Fuera de alcance: comandas, pantallas de cocina, TPV.
   - `validateZone` revisa el plano: mesas que se pisan, que se salen de la sala o con un número de asientos imposible. Tiene en cuenta el giro.
   - `durationFor` dice cuánto tiempo ocupa la mesa un grupo, según su tamaño.
   - `seatingOptions` dice dónde podría sentarse un grupo, de mejor a peor: la mesa más pequeña en la que cabe y, si no hay, mesas vecinas juntas.
+  - `canStillSeat` dice si las mesas que ya tiene un grupo le siguen dando sitio después de cambiar el plano.
 - `apps/api`: una API con [Fastify](https://fastify.dev/) en TypeScript.
   - `GET /venues/:slug/floor-plan` devuelve las zonas y las mesas, más los problemas que el motor encuentra en el plano.
   - `POST /venues/:slug/reservations` reserva mesa. El motor elige la mesa (o mesas) y cuánto tiempo se guarda depende del tamaño del grupo. Responde `409` si no queda nada libre.
+  - Edición del plano: `POST /venues/:slug/zones`, `PATCH` y `DELETE /venues/:slug/zones/:zoneId`, `POST /venues/:slug/zones/:zoneId/tables`, `PATCH` y `DELETE /venues/:slug/tables/:tableId`. Mira [editar el plano](#editar-el-plano).
   - `GET /health` comprueba que la API llega a la base de datos.
   - `GET /openapi.json` describe la API (OpenAPI 3.1).
 - `db/migrations`: el esquema, en archivos SQL normales. Un pequeño programa los aplica en orden, cada uno en su transacción y con un bloqueo para que dos copias de la app no migren a la vez.
@@ -79,6 +81,18 @@ La CI pasa las mismas comprobaciones en cada pull request contra PostgreSQL 18, 
 - `style` es JSON libre para el editor del plano (colores y similares). El motor de reservas nunca lo lee.
 - Una reserva puede ocupar varias mesas (`reservation_tables`), para grupos en mesas juntas.
 
+## Editar el plano
+
+Las zonas y las mesas se pueden crear, cambiar y quitar con la API: posición, tamaño, forma, giro, estilo, zona y si la mesa se puede reservar por internet.
+
+- Cada cambio se comprueba con `validateZone` contra lo que hay guardado. Si una mesa fuera a pisar otra, salirse de su zona o tener asientos imposibles, se rechaza con `422` y la lista de problemas. Los problemas que el plano ya tenía no bloquean cambios que no tienen que ver.
+- Ningún cambio deja sin sitio a una reserva futura. Quitar asientos, separar mesas juntas, hacer redonda una de ellas o llevarla a otra zona se rechaza con `409` mientras una reserva la necesite.
+- Marcar una mesa como no reservable siempre se puede: las reservas ya hechas la conservan y las nuevas van a otra mesa.
+- Una mesa con una reserva futura no se puede quitar. Una mesa que solo tuvo reservas pasadas se **retira** en vez de borrarse: sale del plano y del motor, y las reservas antiguas siguen apuntando a ella. Su nombre queda libre. Quitar una zona funciona igual con todas sus mesas.
+- Los cambios en la misma zona esperan su turno (bloquean la zona y luego las mesas). Una reserva que tuvo que esperar a que se editaran sus mesas vuelve a leer el plano antes de guardarse, así que no puede caer en una mesa que acaba de perder asientos o de dejar de ser reservable.
+
+> **Todavía sin inicio de sesión.** Cualquiera que llegue a la API puede usar estas rutas. No la pongas en internet hasta que esté el inicio de sesión del personal.
+
 ## Cómo se evitan las reservas dobles
 
 - Cada reserva guarda su hora como un rango, `[inicio, fin)`. Una reserva que acaba a las 21:30 y otra que empieza a las 21:30 no se pisan.
@@ -94,7 +108,7 @@ Todavía sin comprobar: el horario de apertura. Por ahora todos los locales usan
 ## Hoja de ruta
 
 1. ~~**Motor de reservas sin reservas dobles.**~~ Hecho.
-2. **Editor del plano.** Dibujar zonas y mesas; las mesas que se tocan se pueden juntar.
+2. **Editor del plano.** ~~API para editar zonas y mesas, comprobada por el motor.~~ Hecho. La pantalla para dibujarlas llega con el panel del local.
 3. **Página pública de reserva.** Varios idiomas (también de derecha a izquierda), propone horas cercanas cuando la pedida está llena, pensada para cumplir el RGPD.
 4. **Panel del local.** El servicio del día, confirmar, cancelar, sentar, avisos por email.
 5. **Guía de despliegue.** Copias de seguridad y uso en un local de verdad.

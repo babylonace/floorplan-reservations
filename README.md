@@ -4,7 +4,7 @@ Table reservations for restaurants, where the venue draws its own floor plan and
 
 [Leer en español](README.es.md)
 
-> **Status: early.** Phase 1 is done: the API can take a booking and the database refuses double bookings. There is no floor plan editor, booking page or staff screen yet. See the [roadmap](#roadmap).
+> **Status: early.** The API can take a booking, the database refuses double bookings, and staff can edit the floor plan through the API. There is no login, drawing screen, booking page or staff screen yet. See the [roadmap](#roadmap).
 
 ## Why
 
@@ -25,9 +25,11 @@ Out of scope: orders, kitchen screens, point of sale.
   - `validateZone` checks a floor plan for tables that overlap, stick out of the room or have impossible seat counts. It takes rotation into account.
   - `durationFor` says how long a party keeps a table, based on its size.
   - `seatingOptions` lists where a party could sit, best first: the smallest single table that fits, otherwise neighbouring tables pushed together.
+  - `canStillSeat` says whether tables a party already holds still give it room after the plan changes.
 - `apps/api`: a [Fastify](https://fastify.dev/) API in TypeScript.
   - `GET /venues/:slug/floor-plan` returns the zones and tables, plus any problems the engine finds in the plan.
   - `POST /venues/:slug/reservations` books a table. The engine picks the table (or tables), and how long it is kept depends on the party size. It answers `409` when nothing is free.
+  - Floor plan editing: `POST /venues/:slug/zones`, `PATCH` and `DELETE /venues/:slug/zones/:zoneId`, `POST /venues/:slug/zones/:zoneId/tables`, `PATCH` and `DELETE /venues/:slug/tables/:tableId`. See [editing the plan](#editing-the-plan).
   - `GET /health` checks that the API can reach the database.
   - `GET /openapi.json` describes the API (OpenAPI 3.1).
 - `db/migrations`: the schema, as plain SQL files. A small runner applies them in order, each in a transaction, behind a lock so two copies of the app can't migrate at the same time.
@@ -79,6 +81,18 @@ CI runs the same checks on every pull request against PostgreSQL 18, and also bu
 - `style` is free-form JSON for the plan editor (colours and the like). The booking engine never reads it.
 - One reservation can take several tables (`reservation_tables`), for groups seated at tables pushed together.
 
+## Editing the plan
+
+Zones and tables can be added, changed and removed through the API: position, size, shape, rotation, style, zone and whether the table can be booked online.
+
+- Every change is checked with `validateZone` against what is stored. A change that would make a table overlap another one, stick out of its zone or have impossible seats is refused with `422` and the list of problems. Problems the plan already had don't block unrelated edits.
+- Changes never leave an upcoming reservation without room. Taking seats away, moving joined tables apart, making one of them round or moving it to another zone is refused with `409` while a booking needs it.
+- Marking a table as not bookable is always allowed: bookings already made keep it, new ones go elsewhere.
+- A table with an upcoming reservation can't be removed. A table that was only booked in the past is **retired** instead of deleted: it leaves the plan and the engine, and old reservations still point at it. Its label is free again. Removing a zone works the same way for all its tables.
+- Edits to the same zone take turns (they lock the zone, then the tables). A booking that had to wait for an edit of its tables reads the plan again before it is saved, so it can't land on a table that just lost its seats or stopped being bookable.
+
+> **No login yet.** These routes are open to anyone who can reach the API. Don't put it on the internet until staff login lands.
+
 ## How double bookings are stopped
 
 - Each reservation has its time as a range, `[start, end)`. A booking that ends at 21:30 and one that starts at 21:30 don't overlap.
@@ -94,7 +108,7 @@ Not checked yet: opening hours. Durations use the sample rules in `durationFor` 
 ## Roadmap
 
 1. ~~**Booking engine with no double bookings.**~~ Done.
-2. **Floor plan editor.** Draw zones and tables; tables that touch can be joined.
+2. **Floor plan editor.** ~~API to edit zones and tables, checked by the engine.~~ Done. The screen to draw them comes with the staff screen.
 3. **Public booking page.** Several languages (including right-to-left), suggests nearby times when the one asked for is full, GDPR-friendly.
 4. **Staff screen.** Today's service, confirm, cancel, seat, email notices.
 5. **Deployment guide.** Backups and running it for a real venue.
