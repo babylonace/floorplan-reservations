@@ -201,6 +201,25 @@ test("creates, renames and deletes a zone", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Patio interior" })).toHaveCount(0);
 });
 
+test("puts the plan on the right, as tall as the window, and the rest in a column on the left", async ({
+  page,
+}) => {
+  await signIn(page, OWNER);
+  const viewport = page.viewportSize();
+  const plan = await page.locator(".canvas-wrap").boundingBox();
+  const add = await page.getByRole("button", { name: "Añadir mesa rectangular" }).boundingBox();
+  const save = await page.getByRole("button", { name: "Guardar cambios" }).boundingBox();
+  const signOut = await page.getByRole("button", { name: "Cerrar sesión" }).boundingBox();
+  if (!viewport || !plan || !add || !save || !signOut) throw new Error("Not on screen");
+  // Only the zone tabs above the plan, and the plan reaches the bottom of the window.
+  expect(plan.y).toBeLessThan(60);
+  expect(Math.abs(plan.y + plan.height - viewport.height)).toBeLessThan(2);
+  // The tools are in the column on its left, with the account at the bottom.
+  for (const button of [add, save, signOut]) expect(button.x + button.width).toBeLessThan(plan.x);
+  expect(add.y).toBeLessThan(save.y);
+  expect(signOut.y + signOut.height).toBeGreaterThan(viewport.height - 60);
+});
+
 test("lets staff look without changing anything, in English too", async ({ page }) => {
   await signIn(page, STAFF);
   await expect(
