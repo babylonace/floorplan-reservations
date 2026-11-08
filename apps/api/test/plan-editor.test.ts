@@ -26,6 +26,7 @@ interface ApiTable {
   rotation: number;
   style: Record<string, unknown>;
   bookable: boolean;
+  seatSides: string[] | null;
 }
 
 interface ApiZone {
@@ -594,6 +595,104 @@ describe("plan edits never break upcoming reservations", () => {
       style: { color: "green" },
     });
     expect(nudge.statusCode).toBe(200);
+  });
+});
+
+describe("bars and tables against the wall", () => {
+  /** A stretch of bar 120 × 50 cm with two stools on its bottom side. */
+  const stretch = (label: string, x: number) => ({
+    label,
+    minSeats: 1,
+    maxSeats: 2,
+    x,
+    y: 500,
+    width: 120,
+    height: 50,
+    seatSides: ["bottom"],
+  });
+
+  async function barVenue(slug: string, count: number) {
+    const venue = await venueWith(slug);
+    const ids: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const response = await call(
+        "POST",
+        `/venues/${slug}/zones/${venue.zoneId}/tables`,
+        stretch(`B${String(i + 1)}`, 160 + i * 120),
+      );
+      expect(response.statusCode).toBe(201);
+      ids.push(response.json<ApiTable>().id);
+    }
+    return { ...venue, ids };
+  }
+
+  it("leaves existing tables seated all around and stores the sides of a stretch", async () => {
+    const { zoneId } = await venueWith("bar-sides", [{ label: "A", x: 100 }]);
+    const created = await call(
+      "POST",
+      `/venues/bar-sides/zones/${zoneId}/tables`,
+      stretch("B1", 600),
+    );
+    expect(created.statusCode).toBe(201);
+    const bar = created.json<ApiTable>();
+    expect(bar.seatSides).toEqual(["bottom"]);
+
+    const plan = await floorPlan("bar-sides");
+    expect(plan.zones[0]?.tables.map((t) => [t.label, t.seatSides])).toEqual([
+      ["A", null],
+      ["B1", ["bottom"]],
+    ]);
+
+    // Sides come back once each, clockwise from the top; null puts seats all around again.
+    const sides = await call("PATCH", `/venues/bar-sides/tables/${bar.id}`, {
+      seatSides: ["left", "top"],
+    });
+    expect(sides.json<ApiTable>().seatSides).toEqual(["top", "left"]);
+    const around = await call("PATCH", `/venues/bar-sides/tables/${bar.id}`, { seatSides: null });
+    expect(around.json<ApiTable>().seatSides).toBeNull();
+  });
+
+  // A single word such as "top" is taken as ["top"]: Fastify turns a lone value into a list.
+  it("refuses sides that make no sense", async () => {
+    const { zoneId } = await venueWith("bar-bad-sides");
+    for (const seatSides of [
+      [],
+      ["front"],
+      ["top", "top"],
+      ["top", "right", "bottom", "left", "top"],
+    ]) {
+      const response = await call("POST", `/venues/bar-bad-sides/zones/${zoneId}/tables`, {
+        ...TABLE,
+        seatSides,
+      });
+      expect(response.statusCode, JSON.stringify(seatSides)).toBe(400);
+    }
+  });
+
+  it("seats a couple at one stretch and a group at stretches next to each other", async () => {
+    await barVenue("bar-booking", 4);
+    const couple = await book("bar-booking", 2);
+    expect(couple.statusCode).toBe(201);
+    expect(couple.json<{ tables: unknown[] }>().tables).toHaveLength(1);
+
+    const eight = await book("bar-booking", 8, "2030-06-02T20:00:00+02:00");
+    expect(eight.statusCode).toBe(201);
+    expect(eight.json<{ tables: unknown[] }>().tables).toHaveLength(4);
+  });
+
+  it("refuses to turn the stools of a booked stretch away from the rest of its party", async () => {
+    const { ids } = await barVenue("bar-keep", 2);
+    const booked = await book("bar-keep", 4);
+    expect(booked.json<{ tables: unknown[] }>().tables).toHaveLength(2);
+
+    // Stools on the side where the stretches meet, or facing the other way, split the party.
+    for (const seatSides of [["left"], ["top"], null]) {
+      const response = await call("PATCH", `/venues/bar-keep/tables/${ids[1] ?? ""}`, {
+        seatSides,
+      });
+      expect(response.statusCode, JSON.stringify(seatSides)).toBe(409);
+      expect(response.json<Refusal>().code).toBe("reservations_without_room");
+    }
   });
 });
 

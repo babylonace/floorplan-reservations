@@ -1,4 +1,10 @@
-import type { PlanIssue, PlanTable, TableShape } from "@floorplan-reservations/engine";
+import {
+  normalizeSides,
+  type PlanIssue,
+  type PlanTable,
+  type TableShape,
+  type TableSide,
+} from "@floorplan-reservations/engine";
 
 /** Pieces of the HTTP contract that several routes share. */
 
@@ -63,6 +69,7 @@ export const tableSchema = {
     "rotation",
     "style",
     "bookable",
+    "seatSides",
   ],
   properties: {
     id: { type: "string", format: "uuid" },
@@ -78,6 +85,13 @@ export const tableSchema = {
     rotation: { type: "integer", description: "Degrees, clockwise." },
     style: { type: "object", additionalProperties: true },
     bookable: { type: "boolean" },
+    seatSides: {
+      type: ["array", "null"],
+      items: { type: "string", enum: ["top", "right", "bottom", "left"] },
+      description:
+        "Sides of the table that have seats, before it is turned. null means all around. " +
+        "One side is a stretch of bar or a table against the wall.",
+    },
   },
 } as const;
 
@@ -96,7 +110,7 @@ export const zoneSchema = {
 /** The columns every query selects when it hands a table to `toApiTable`. */
 export const TABLE_COLUMNS =
   "t.id, t.zone_id, t.label, t.min_seats, t.max_seats, t.shape, t.x, t.y, t.width, t.height, " +
-  "t.rotation, t.style, t.bookable";
+  "t.rotation, t.style, t.bookable, t.seat_sides";
 
 export interface TableRow {
   id: string;
@@ -112,12 +126,14 @@ export interface TableRow {
   rotation: number;
   style: Record<string, unknown>;
   bookable: boolean;
+  seat_sides: TableSide[] | null;
 }
 
 export interface ApiTable extends PlanTable {
   zoneId: string;
   style: Record<string, unknown>;
   bookable: boolean;
+  seatSides: TableSide[] | null;
 }
 
 export function toApiTable(row: TableRow): ApiTable {
@@ -135,6 +151,7 @@ export function toApiTable(row: TableRow): ApiTable {
     rotation: row.rotation,
     style: row.style,
     bookable: row.bookable,
+    seatSides: row.seat_sides ? normalizeSides(row.seat_sides) : null,
   };
 }
 

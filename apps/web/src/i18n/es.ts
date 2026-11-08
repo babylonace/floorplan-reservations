@@ -69,6 +69,9 @@ export const es: DeepPartial<Messages> = {
     addRound: "Añadir mesa redonda",
     addRectShort: "Rectangular",
     addRoundShort: "Redonda",
+    addBar: "Añadir tramo de barra",
+    addBarShort: "Barra",
+    barPrefix: "B",
     panelTitle: (label: string) => `Mesa ${label}`,
     label: "Nombre o número",
     labelRequired: "Ponle un nombre o un número.",
@@ -83,6 +86,15 @@ export const es: DeepPartial<Messages> = {
     position: "Posición (m)",
     x: "Desde la izquierda",
     y: "Desde arriba",
+    seats: "Asientos",
+    seatsAround: "Alrededor",
+    seatsSides: "En algunos lados",
+    sides: { top: "Arriba", right: "Derecha", bottom: "Abajo", left: "Izquierda" },
+    sidesLegend: "Lados con asientos",
+    sidesHint:
+      "Lados de la mesa sin girar. Una barra o una mesa contra la pared tiene asientos en un solo lado. Las mesas nunca se juntan por un lado con asientos.",
+    barHint:
+      "Tramo de barra: se puede reservar un tramo solo, y un grupo ocupa varios tramos seguidos, en línea. Añade más con «Añadir tramo de barra» mientras este está elegido.",
     bookable: "Se puede reservar por internet",
     bookableHint:
       "Si la desmarcas, la mesa sigue en el plano pero no se ofrece en las reservas por internet.",
@@ -116,6 +128,11 @@ export const es: DeepPartial<Messages> = {
           : `de ${String(d.minSeats)} a ${String(d.maxSeats)} personas`,
         `a ${d.x} de la izquierda y ${d.y} de arriba`,
         d.rotation === 0 ? "" : `girada ${String(d.rotation)} grados`,
+        d.seatedSides === null
+          ? ""
+          : d.seatedSides === 1
+            ? "asientos en un solo lado"
+            : `asientos en ${String(d.seatedSides)} lados`,
         d.bookable ? "" : "no se reserva por internet",
         d.problems === 0 ? "" : plural(d.problems, "1 problema", `${String(d.problems)} problemas`),
       ]
@@ -177,6 +194,7 @@ export const es: DeepPartial<Messages> = {
       `La mesa ${label} mide ahora ${width} por ${depth}.`,
     removed: (label: string) => `Mesa ${label} quitada. Guarda para que sea definitivo.`,
     added: (label: string) => `Mesa ${label} añadida.`,
+    addedInLine: (label: string, after: string) => `Tramo de barra ${label} añadido tras ${after}.`,
   },
   errors: {
     network: "No se puede contactar con el servidor. Revisa la conexión y vuelve a probar.",

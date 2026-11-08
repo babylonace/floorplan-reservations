@@ -216,3 +216,33 @@ test("lets staff look without changing anything, in English too", async ({ page 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
 });
+
+test("builds a bar in sections, with stools on one side, and keeps it after a reload", async ({
+  page,
+}) => {
+  await signIn(page, OWNER);
+  const addBar = page.getByRole("button", { name: "Añadir tramo de barra" });
+  await addBar.click();
+  await expect(tableButton(page, "B1")).toBeFocused();
+  // With B1 selected, the next section goes right after it, in line.
+  await addBar.click();
+  await expect(tableButton(page, "B2")).toBeFocused();
+  await expect(page.getByText("Sin problemas", { exact: true })).toBeVisible();
+  await expect(page.locator(".stools circle")).toHaveCount(4);
+  const first = await tableButton(page, "B1").locator(".table-top").boundingBox();
+  const second = await tableButton(page, "B2").locator(".table-top").boundingBox();
+  // Same line, and B2 starts where B1 ends (give or take the outline).
+  if (!first || !second) throw new Error("The bar sections are not on screen");
+  expect(Math.abs(second.y - first.y)).toBeLessThan(1);
+  expect(Math.abs(second.x - first.x - first.width)).toBeLessThan(3);
+
+  // The side picker shows the stools on the bottom side; axe finds nothing serious.
+  await expect(page.getByLabel("Abajo")).toBeChecked();
+  await expectNoAccessibilityProblems(page);
+
+  await page.getByRole("button", { name: "Guardar cambios" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "2 cambios guardados." })).toBeVisible();
+  await page.reload();
+  await expect(tableButton(page, "B2")).toHaveAccessibleName(/asientos en un solo lado/);
+  await expect(page.locator(".stools circle")).toHaveCount(4);
+});

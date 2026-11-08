@@ -311,6 +311,63 @@ fieldset {
     inset 0 0 0 6px var(--marigold);
 }
 
+/* The four sides around a small table, each where it is: top above, left on the left… */
+.side-picker {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-areas:
+    ". top ."
+    "left table right"
+    ". bottom .";
+  align-items: center;
+  justify-items: center;
+  gap: 0.15rem 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.side-picker-table {
+  grid-area: table;
+  width: 4.5rem;
+  height: 2.25rem;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-small);
+  background: #e6dcc6;
+}
+
+.side-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.side-pick input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+  accent-color: var(--ink);
+}
+
+.side-pick-top {
+  grid-area: top;
+}
+
+.side-pick-right {
+  grid-area: right;
+  justify-self: start;
+}
+
+.side-pick-bottom {
+  grid-area: bottom;
+}
+
+.side-pick-left {
+  grid-area: left;
+  justify-self: end;
+}
+
 .swatches {
   display: flex;
   flex-wrap: wrap;
@@ -907,7 +964,8 @@ fieldset {
   opacity: 0.7;
 }
 
-.chairs rect {
+.chairs rect,
+.stools circle {
   fill: rgb(23 33 30 / 14%);
   stroke: rgb(23 33 30 / 45%);
 }
@@ -1269,9 +1327,14 @@ kbd {
     padding-inline-end: 0.75rem;
   }
 
-  .field-check input {
+  .field-check input,
+  .side-pick input {
     width: 1.5rem;
     height: 1.5rem;
+  }
+
+  .side-pick {
+    min-height: 2.75rem;
   }
 }
 

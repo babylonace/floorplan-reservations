@@ -7,6 +7,12 @@
 
 export type TableShape = "rect" | "round";
 
+/** A side of a table, seen from the table itself before it is turned. */
+export type TableSide = "top" | "right" | "bottom" | "left";
+
+/** The four sides, clockwise from the top. */
+export const TABLE_SIDES: readonly TableSide[] = ["top", "right", "bottom", "left"];
+
 export interface PlanTable {
   id: string;
   label: string;
@@ -18,6 +24,12 @@ export interface PlanTable {
   width: number;
   height: number;
   rotation: number;
+  /**
+   * The sides of a rectangular table that have seats, before it is turned. Missing or null
+   * means seats all around, as tables always had. One side only is a stretch of bar or a table
+   * against the wall. Round tables ignore it.
+   */
+  seatSides?: readonly TableSide[] | null;
 }
 
 export interface PlanZone {
@@ -123,4 +135,27 @@ export function validateZone(zone: PlanZone): PlanIssue[] {
   }
 
   return issues;
+}
+
+/** `sides` once each, in the order of `TABLE_SIDES`. */
+export function normalizeSides(sides: readonly TableSide[]): TableSide[] {
+  return TABLE_SIDES.filter((side) => sides.includes(side));
+}
+
+/**
+ * The sides of a table that have seats, as directions on the plan once the table is turned.
+ * null when the seats go all around (or the table is round), and for tables turned at an angle
+ * that is not a multiple of 90 degrees, whose sides face no plan direction.
+ */
+export function seatedSidesOnPlan(table: PlanTable): Set<TableSide> | null {
+  if (table.shape !== "rect" || !table.seatSides || table.rotation % 90 !== 0) return null;
+  const turns = (((table.rotation / 90) % 4) + 4) % 4;
+  return new Set(
+    table.seatSides.map((side) => TABLE_SIDES[(TABLE_SIDES.indexOf(side) + turns) % 4] ?? side),
+  );
+}
+
+/** True for a rectangular table with seats on one side only: a stretch of bar, or a table by the wall. */
+export function isOneSided(table: PlanTable): boolean {
+  return table.shape === "rect" && new Set(table.seatSides ?? TABLE_SIDES).size === 1;
 }

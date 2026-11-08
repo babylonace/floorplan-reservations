@@ -97,6 +97,7 @@ CI runs the same checks on every pull request against PostgreSQL 18. The browser
 ## How the plan is stored
 
 - Units are centimetres.
+- `seatSides` lists the sides of a rectangular table that have seats, before it is turned (`top`, `right`, `bottom`, `left`). `null`, the default, means all around, as tables always had; migration `0006` adds it without changing existing tables.
 - A table's `x` and `y` are the position of its **centre** inside its zone, measured from the zone's top-left corner. Rotation is in degrees, clockwise.
 - `style` is free-form JSON for the plan editor (colours and the like). The booking engine never reads it.
 - One reservation can take several tables (`reservation_tables`), for groups seated at tables pushed together.
@@ -147,6 +148,7 @@ A screen for the venue's owners to draw their rooms. Staff can open it too, read
 - **The side panel** edits everything the API stores: name, shape, seats, size, position, turn, colour and whether it can be booked online. With no table selected, it edits the zone. Zones are created, renamed, resized and deleted from there too.
 - **Lengths in metres.** Widths, depths and positions are shown and typed in metres, with the decimal mark of the editor's language (1,2 m in Spanish, 1.2 m in English); a comma or a point both work when typing, and the arrow keys step the value by 5 cm. The API still stores whole centimetres.
 - **Compact, like a work tool.** With a mouse, buttons and fields are 32 px tall and the panels are tight, so more of the plan fits on screen; touch screens keep 44 px. On a phone the top rows shrink to short labels (screen readers still hear the full ones), so the plan starts higher up.
+- **Bars and tables against the wall.** A rectangular table has seats all around (the default) or on the sides you tick, laid out around a little drawing of the table. **Add bar section** adds a 1.2 m section with two stools along one side; with a section selected, the next one goes straight after it, in line and the same way round. Chairs and stools are only drawn on the sides that have seats.
 - **Messages float.** After saving, creating or deleting, a short message floats over the bottom of the plan (clear of the side panel), so nothing on the page moves. Good news closes itself after six seconds, but waits while the pointer or the keyboard is on it; errors stay until they are closed. Screen readers hear both.
 - **Problems show as you work.** The editor runs the same `validateZone` as the API on every change: overlapping tables are hatched in red, with the exact area where they meet, and listed with a link to each table.
 - **Nothing is saved until you press Save.** Saving sends only what changed, one table at a time. If the API refuses something (a table with an upcoming booking, a move that would leave a party without room), the message says which table and why, in the editor's language, and that change stays on screen to fix. A table that cannot be removed goes back on the plan. Moves that only fail because another table hasn't moved out of the way yet are tried again after the others. The browser asks before you leave with unsaved changes.
@@ -157,6 +159,8 @@ A screen for the venue's owners to draw their rooms. Staff can open it too, read
 ![The editor on a tablet held upright, in Spanish: the plan fills the width, table 4 is selected with its larger turning and resizing handles, and the side panel starts below the plan.](docs/images/editor-tablet.png)
 
 ![The editor on a phone, in Spanish: one short row at the top with the venue, the language and an icon to sign out, short button labels (Rectangular, Redonda, Descartar, Guardar), and the plan right below.](docs/images/editor-phone.png)
+
+![A bar built from three sections, B1 to B3, each with two round stools along its bottom side; the side panel of B3, in Spanish, shows "Asientos: En algunos lados" with only "Abajo" (bottom) ticked around a small drawing of the table.](docs/images/editor-bar.png)
 
 ### Sign-in cookies in development and in production
 
@@ -173,7 +177,9 @@ The session cookie is `__Host-`, `Secure` and `SameSite=Strict`, and the API tur
 - The API reads the free tables, books the best option and, if another request got there first, rolls back to a savepoint and tries again. Requests that want the same table wait their turn, so they don't stall each other.
 - The tests hold back writes until every request in a burst has read the free tables, then release them at once: 25 requests for one table give exactly one booking.
 
-Joining tables: only rectangular tables in the same zone, standing side by side (gap of 5 cm or less) and not turned at an angle. At most three, and every one of them must be needed.
+Joining tables: only rectangular tables in the same zone, standing side by side (gap of 5 cm or less) and not turned at an angle. At most three, and every one of them must be needed. Tables are never pushed together along a side that has seats, so joined tables keep every seat they say they have.
+
+Bars: a bar drawn as one long table would be taken whole by a couple. So a bar is drawn in short sections with seats on one side (say two stools each): a couple books one section, and a group takes sections next to each other, up to six, in a line (stools facing the same way, seated edges lined up). Sections back to back on both sides of a bar, or facing different ways, are never one group, and bar sections never join ordinary tables. A table against the wall (seats on one side) follows the same rule.
 
 Durations use the sample rules in `durationFor` for every venue for now.
 

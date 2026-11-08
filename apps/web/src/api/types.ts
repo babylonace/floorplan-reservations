@@ -1,4 +1,4 @@
-import type { PlanIssue, PlanTable } from "@floorplan-reservations/engine";
+import type { PlanIssue, PlanTable, TableSide } from "@floorplan-reservations/engine";
 
 /** The shapes the API sends and accepts. Lengths are in centimetres, angles in degrees. */
 
@@ -19,6 +19,8 @@ export interface Table extends PlanTable {
   zoneId: string;
   style: Record<string, unknown>;
   bookable: boolean;
+  /** Sides with seats before the table is turned; null means all around. */
+  seatSides: TableSide[] | null;
 }
 
 export interface Zone {
