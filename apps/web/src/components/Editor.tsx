@@ -1,5 +1,5 @@
 import type { PlanIssue } from "@floorplan-reservations/engine";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ApiError } from "../api/client";
 import { useApi } from "../api/context";
 import type { FloorPlan, PlanZone, Table, ZoneFields } from "../api/types";
@@ -315,7 +315,11 @@ export function Editor({
       )}
 
       <div className="editor-body">
-        <div className="canvas-wrap">
+        <div
+          className="canvas-wrap"
+          // On narrow screens the plan is as tall as the zone's shape needs, not a fixed share.
+          style={{ "--plan-ratio": String(zone.height / zone.width) } as CSSProperties}
+        >
           <PlanCanvas
             zone={zone}
             tables={draft.tables}

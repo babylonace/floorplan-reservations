@@ -1,5 +1,6 @@
 import { boundingBox, type Box, type PlanIssue } from "@floorplan-reservations/engine";
 import {
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -28,6 +29,8 @@ import {
  * The zone drawn to scale. One SVG unit is one centimetre, so the plan's own numbers are used
  * as they are. Tables are focusable: Tab walks through them, the arrow keys move the selected
  * one and R turns it. The pointer drags, turns (round handle) and resizes (square handle).
+ * On a touch screen the handles grow, and a finger on the plan's free space scrolls the page:
+ * only a finger that lands on a table moves it.
  */
 
 export interface PlanCanvasProps {
@@ -50,6 +53,35 @@ type Gesture =
 
 const SCALE_STEPS = [50, 100, 200, 500, 1000, 2000, 5000, 10_000, 20_000];
 
+/**
+ * Handle sizes in screen pixels. The part you can grab is bigger than the part you see: at
+ * least 24 px with a mouse (WCAG 2.2 target size) and 44 px for a finger.
+ */
+export const HANDLES = {
+  fine: { stem: 22, rotate: 7, resize: 12, target: 24 },
+  coarse: { stem: 34, rotate: 10, resize: 18, target: 44 },
+} as const;
+
+/** True on screens driven mainly by a finger, such as a tablet. */
+function useCoarsePointer(): boolean {
+  const query = "(pointer: coarse)";
+  const [coarse, setCoarse] = useState(
+    () => typeof window.matchMedia === "function" && window.matchMedia(query).matches,
+  );
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const list = window.matchMedia(query);
+    const update = () => {
+      setCoarse(list.matches);
+    };
+    list.addEventListener("change", update);
+    return () => {
+      list.removeEventListener("change", update);
+    };
+  }, []);
+  return coarse;
+}
+
 export function PlanCanvas(props: PlanCanvasProps) {
   const { zone, tables, issues, selectedId, editable, onSelect, onChange, onRemove, onAnnounce } =
     props;
@@ -60,6 +92,27 @@ export function PlanCanvas(props: PlanCanvasProps) {
   const hatchId = `hatch-${ids}`;
   const gridId = `grid-${ids}`;
   const helpId = `help-${ids}`;
+  const handles = useCoarsePointer() ? HANDLES.coarse : HANDLES.fine;
+
+  // A finger that lands on a table drags it instead of scrolling the page; anywhere else on the
+  // plan it scrolls as usual. Pointer events cannot stop scrolling, so this listens to touches.
+  const editableRef = useRef(editable);
+  useEffect(() => {
+    editableRef.current = editable;
+  }, [editable]);
+  useEffect(() => {
+    const element = svgRef.current;
+    if (!element) return;
+    const hold = (event: TouchEvent) => {
+      if (editableRef.current && event.target instanceof Element) {
+        if (event.target.closest(".plan-table")) event.preventDefault();
+      }
+    };
+    element.addEventListener("touchstart", hold, { passive: false });
+    return () => {
+      element.removeEventListener("touchstart", hold);
+    };
+  }, []);
 
   // Labels, handles and lines keep the same size on screen however big the zone is: `unit` is
   // how many centimetres one screen pixel covers.
@@ -341,6 +394,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
             problems={problems.get(table.id) ?? 0}
             hatchId={hatchId}
             editable={editable}
+            handles={handles}
             label={t.plan.tableName({
               label: table.label,
               round: table.shape === "round",
@@ -406,6 +460,7 @@ interface TableShapeProps {
   problems: number;
   hatchId: string;
   editable: boolean;
+  handles: (typeof HANDLES)[keyof typeof HANDLES];
   label: string;
   bindElement: (element: SVGGElement | null) => void;
   onPointerDown: (event: PointerEvent, kind: Gesture["kind"]) => void;
@@ -420,6 +475,7 @@ function TableShape({
   problems,
   hatchId,
   editable,
+  handles,
   label,
   bindElement,
   onPointerDown,
@@ -473,27 +529,48 @@ function TableShape({
         <Chairs table={table} unit={unit} />
         {shape("focus-ring", 9 * unit, 2 * unit)}
         {selected && shape("selection-ring", 5 * unit, 5 * unit)}
+        {/* A thin ink edge keeps the yellow ring visible on the pale floor (3:1 or more). */}
+        {selected && shape("selection-edge", 8 * unit, 1.5 * unit)}
         <g style={{ fill }}>{shape("table-top", 0, 1.5 * unit)}</g>
         {problems > 0 && <g fill={`url(#${hatchId})`}>{shape("problem-hatch", 0, 3 * unit)}</g>}
         {selected && editable && (
           <g className="handles">
-            <line x1={0} y1={-h / 2} x2={0} y2={-h / 2 - 22 * unit} strokeWidth={1.5 * unit} />
+            <line
+              x1={0}
+              y1={-h / 2}
+              x2={0}
+              y2={-h / 2 - handles.stem * unit}
+              strokeWidth={1.5 * unit}
+            />
             <circle
               className="handle handle-rotate"
-              cy={-h / 2 - 22 * unit}
-              r={7 * unit}
+              cy={-h / 2 - handles.stem * unit}
+              r={handles.rotate * unit}
               strokeWidth={2 * unit}
+            />
+            <rect
+              className="handle handle-resize"
+              x={w / 2 - (handles.resize / 2) * unit}
+              y={h / 2 - (handles.resize / 2) * unit}
+              width={handles.resize * unit}
+              height={handles.resize * unit}
+              strokeWidth={2 * unit}
+            />
+            {/* What the pointer grabs: invisible, and bigger than what is drawn. */}
+            <circle
+              className="handle-target handle-target-rotate"
+              cy={-h / 2 - handles.stem * unit}
+              r={(handles.target / 2) * unit}
               onPointerDown={(event) => {
                 onPointerDown(event, "rotate");
               }}
             />
             <rect
-              className="handle handle-resize"
-              x={w / 2 - 6 * unit}
-              y={h / 2 - 6 * unit}
-              width={12 * unit}
-              height={12 * unit}
-              strokeWidth={2 * unit}
+              className="handle-target handle-target-resize"
+              x={w / 2 - (handles.target / 2) * unit}
+              y={h / 2 - (handles.target / 2) * unit}
+              width={handles.target * unit}
+              height={handles.target * unit}
               onPointerDown={(event) => {
                 onPointerDown(event, "resize");
               }}

@@ -41,7 +41,8 @@ const FOCUSABLE =
 
 /**
  * A dialog that keeps the keyboard inside it while open, closes with Escape and gives focus
- * back to whatever opened it.
+ * back to whatever opened it. Without `onClose`, Escape does nothing: the dialog only ends
+ * through its own buttons.
  */
 export function Modal({
   title,
@@ -50,7 +51,7 @@ export function Modal({
 }: {
   title: string;
   children: ReactNode;
-  onClose: () => void;
+  onClose?: () => void;
 }) {
   const titleId = useId();
   const box = useRef<HTMLDivElement>(null);
@@ -70,7 +71,7 @@ export function Modal({
   function onKeyDown(event: KeyboardEvent) {
     if (event.key === "Escape") {
       event.stopPropagation();
-      onClose();
+      onClose?.();
       return;
     }
     if (event.key !== "Tab" || !box.current) return;

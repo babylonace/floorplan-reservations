@@ -40,3 +40,13 @@ test("editor showing two tables on top of each other", async ({ page }) => {
   await page.getByRole("button", { name: "English" }).click();
   await page.screenshot({ path: `${folder}editor-problem-en.png` });
 });
+
+test.describe("on a tablet", () => {
+  test.use({ viewport: { width: 768, height: 1024 }, hasTouch: true, isMobile: true });
+
+  test("editor held upright, with the bigger touch handles", async ({ page }) => {
+    await signIn(page);
+    await page.getByRole("button", { name: /^Mesa 4,/ }).focus();
+    await page.screenshot({ path: `${folder}editor-tablet.png` });
+  });
+});

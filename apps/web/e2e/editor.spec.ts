@@ -106,7 +106,10 @@ test("adds, drags, turns and resizes a table with the mouse", async ({ page }) =
   await expect(page.getByText("Sin problemas", { exact: true })).toBeVisible();
 
   // Make it rectangular, then pull the corner handle out to resize it.
-  await page.getByRole("radio", { name: "Con esquinas" }).check();
+  await page.getByRole("radio", { name: "Rectangular" }).check();
+  // With a mouse, what you grab is at least 24 px even where the drawn handle is smaller.
+  const grab = await page.locator(".handle-target-resize").boundingBox();
+  expect(grab?.width).toBeGreaterThanOrEqual(23.5);
   const handle = page.locator(".handle-resize");
   const corner = await handle.boundingBox();
   if (!corner) throw new Error("The resize handle is not on screen");
@@ -133,7 +136,7 @@ test("adds, drags, turns and resizes a table with the mouse", async ({ page }) =
   await page.getByRole("button", { name: "Guardar cambios" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Cambio guardado." })).toBeVisible();
   await page.reload();
-  await expect(tableButton(page, "5")).toHaveAccessibleName(/con esquinas.*girada 90 grados/);
+  await expect(tableButton(page, "5")).toHaveAccessibleName(/rectangular.*girada 90 grados/);
 });
 
 test("shows overlapping tables, and the API's refusal to save them", async ({ page }) => {
@@ -196,7 +199,7 @@ test("lets staff look without changing anything, in English too", async ({ page 
   await expect(
     page.getByText("Puedes ver el plano. Solo la persona propietaria del local puede cambiarlo."),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Añadir mesa cuadrada" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Añadir mesa rectangular" })).toHaveCount(0);
   await tableButton(page, "1").focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.getByLabel("Desde la izquierda (cm)")).toBeDisabled();
