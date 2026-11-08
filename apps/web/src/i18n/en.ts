@@ -68,9 +68,6 @@ export const en = {
     creating: "Creating…",
     created: (name: string) => `Zone “${name}” created.`,
     panelTitle: "This zone",
-    save: "Save zone",
-    saving: "Saving…",
-    saved: (name: string) => `Zone “${name}” saved.`,
     remove: "Delete zone",
     removeTitle: (name: string) => `Delete the zone “${name}”?`,
     removeBody:
@@ -191,6 +188,7 @@ export const en = {
     unsaved: (n: number) => plural(n, "1 unsaved change", `${String(n)} unsaved changes`),
     allSaved: "All changes saved",
     needsLabels: "Every table needs a name or number before saving.",
+    needsName: "The zone needs a name before saving.",
     save: "Save changes",
     saveShort: "Save",
     saving: "Saving…",

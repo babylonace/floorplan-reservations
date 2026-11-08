@@ -54,9 +54,6 @@ export const es: DeepPartial<Messages> = {
     creating: "Creando…",
     created: (name: string) => `Zona «${name}» creada.`,
     panelTitle: "Esta zona",
-    save: "Guardar zona",
-    saving: "Guardando…",
-    saved: (name: string) => `Zona «${name}» guardada.`,
     remove: "Borrar zona",
     removeTitle: (name: string) => `¿Borrar la zona «${name}»?`,
     removeBody:
@@ -174,6 +171,7 @@ export const es: DeepPartial<Messages> = {
     unsaved: (n: number) => plural(n, "1 cambio sin guardar", `${String(n)} cambios sin guardar`),
     allSaved: "Todo guardado",
     needsLabels: "Todas las mesas necesitan un nombre o un número para guardar.",
+    needsName: "La zona necesita un nombre para guardar.",
     save: "Guardar cambios",
     saveShort: "Guardar",
     saving: "Guardando…",

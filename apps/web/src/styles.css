@@ -89,9 +89,9 @@ select {
 .button {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  min-height: 2rem;
-  padding: 0.25rem 0.7rem;
+  gap: 0.35rem;
+  min-height: 1.75rem;
+  padding: 0.15rem 0.6rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-small);
   background: var(--panel);
@@ -157,8 +157,8 @@ select {
 .icon-button {
   display: grid;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
+  width: 1.75rem;
+  height: 1.75rem;
   border: 0;
   border-radius: var(--radius-small);
   background: transparent;
@@ -187,8 +187,8 @@ select {
 
 .field {
   display: grid;
-  gap: 0.2rem;
-  margin: 0 0 0.6rem;
+  gap: 0.15rem;
+  margin: 0 0 0.5rem;
   padding: 0;
   border: 0;
   min-width: 0;
@@ -197,7 +197,8 @@ select {
 .field > label,
 .field legend {
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
   padding: 0;
 }
 
@@ -208,8 +209,8 @@ select {
 .field select,
 .venue-picker select {
   width: 100%;
-  min-height: 2rem;
-  padding: 0.2rem 0.5rem;
+  min-height: 1.75rem;
+  padding: 0.1rem 0.45rem;
   border: 1px solid #8a9a93;
   border-radius: var(--radius-small);
   background: #ffffff;
@@ -223,7 +224,7 @@ select {
   display: grid;
   grid-template-columns: 1fr 1fr;
   align-items: end;
-  gap: 0.6rem;
+  gap: 0.5rem;
 }
 
 /* Fields grouped under one legend, such as a table's position: the group keeps the spacing. */
@@ -278,10 +279,10 @@ fieldset {
 
 .segmented span {
   display: block;
-  padding: 0.25rem 0.5rem;
+  padding: 0.15rem 0.5rem;
   text-align: center;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
 }
 
 .segmented label + label span {
@@ -330,8 +331,8 @@ fieldset {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  min-height: 2rem;
-  font-size: 0.85rem;
+  min-height: 1.75rem;
+  font-size: 0.75rem;
   cursor: pointer;
 }
 
@@ -514,12 +515,12 @@ fieldset {
 }
 
 .language-switch button {
-  min-height: 1.75rem;
-  padding: 0.2rem 0.6rem;
+  min-height: 1.5rem;
+  padding: 0.1rem 0.5rem;
   border: 0;
   border-radius: 3px;
   background: transparent;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   cursor: pointer;
 }
 
@@ -532,19 +533,19 @@ fieldset {
 /* Signed in */
 
 /*
- * The plan on the right, as tall as the window, with only the zone tabs above it. Everything else
- * is in a column on the left: the venue, the editor's tools and panel (which scroll), and the
- * language and account at the bottom.
+ * The plan on the right, as tall as the window, with the zone tabs above it and the language and
+ * signing out in the top right corner. The venue, the editor's tools and its panel are in a
+ * column on the left. Dense, like a design tool: 13 px text, 28 px controls with a mouse.
  */
 .workspace {
   display: grid;
-  grid-template-columns: var(--panel-width) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: var(--panel-width) minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
-    "top main"
-    "side main"
-    "foot main";
+    "top tabs account"
+    "side main main";
   height: 100dvh;
+  font-size: 0.8125rem;
 }
 
 .side-slot {
@@ -581,30 +582,21 @@ main.empty-state {
   border-inline-end: 1px solid var(--line);
 }
 
-.side-foot {
-  grid-area: foot;
-  display: grid;
-  gap: 0.3rem;
-  padding: 0.45rem 0.85rem 0.55rem;
-  background: var(--panel);
-  border-inline-end: 1px solid var(--line);
-  border-top: 1px solid var(--line);
-}
-
-.side-foot-row {
+.account-actions {
+  grid-area: account;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem 0;
 }
 
 .app-header {
   grid-area: top;
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
   min-width: 0;
-  padding: 0.55rem 0.85rem;
+  padding: 0.4rem 0.75rem;
   background: var(--panel);
   border-inline-end: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
@@ -629,8 +621,8 @@ main.empty-state {
 }
 
 .brand-mark {
-  width: 1.4rem;
-  height: 1.4rem;
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .bm-floor {
@@ -661,6 +653,8 @@ main.empty-state {
 }
 
 .venue-name {
+  flex: none;
+  max-width: 60%;
   min-width: 0;
   overflow: hidden;
   font-weight: 700;
@@ -669,7 +663,8 @@ main.empty-state {
 }
 
 .account {
-  font-size: 0.85rem;
+  min-width: 0;
+  font-size: 0.75rem;
   color: var(--ink-soft);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -690,6 +685,8 @@ main.empty-state {
 }
 
 .zone-bar {
+  grid-area: tabs;
+  min-width: 0;
   display: flex;
   align-items: flex-end;
   gap: 0.6rem;
@@ -706,8 +703,8 @@ main.empty-state {
 }
 
 .zone-tab {
-  min-height: 2rem;
-  padding: 0.25rem 0.85rem;
+  min-height: 1.75rem;
+  padding: 0.15rem 0.75rem;
   border: 1px solid transparent;
   border-bottom: 0;
   border-radius: var(--radius) var(--radius) 0 0;
@@ -771,14 +768,15 @@ main.empty-state {
 }
 
 @media (min-width: 901px) {
-  /* Only the panel scrolls: adding, the state and saving stay in sight at the top. */
+  /* Only the panel scrolls: adding stays in sight at the top, and saving at the bottom. */
   .side-slot {
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
 
-  .side-slot .toolbar {
+  .side-slot .toolbar,
+  .side-slot .panel-actions {
     flex: none;
   }
 
@@ -856,32 +854,31 @@ main.empty-state {
 /* The editor's tools, at the top of the left column: add, then the state and saving. */
 .toolbar {
   display: grid;
-  gap: 0.55rem;
-  padding: 0.7rem 0.85rem;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--line);
 }
 
 .add-tables-section {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.25rem;
 }
 
 .add-title {
   font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--ink);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
 }
 
 .toolbar-group {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.35rem;
+  gap: 0.25rem;
 }
 
 .toolbar-group .button {
   justify-content: center;
   padding-inline: 0.3rem;
-  font-size: 0.85rem;
 }
 
 .toolbar-group .button svg {
@@ -903,28 +900,55 @@ main.empty-state {
   display: inline;
 }
 
-.toolbar-end {
+/* Save, discard and delete for the zone on screen, under its panel. */
+.panel-actions {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+
+.panel-state {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem 0.6rem;
+  gap: 0.25rem 0.5rem;
 }
 
 .save-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.4rem;
-  width: 100%;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.25rem;
 }
 
 .save-actions .button {
   justify-content: center;
 }
 
+.save-actions .button-danger-quiet {
+  padding-inline: 0.5rem;
+}
+
+/* Short words on the save buttons; screen readers still hear the full ones. */
+.save-actions .label-full {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.save-actions .label-short {
+  display: inline;
+}
+
 .status-chip {
-  padding: 0.2rem 0.6rem;
+  padding: 0.05rem 0.5rem;
   border-radius: 999px;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
@@ -939,7 +963,7 @@ main.empty-state {
 }
 
 .save-state {
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   color: var(--ink-soft);
 }
 
@@ -1153,12 +1177,12 @@ main.empty-state {
 }
 
 .panel-section {
-  padding: 0.7rem 0.85rem;
+  padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--line);
 }
 
 .panel-section h2 {
-  font-size: 1rem;
+  font-size: 0.8125rem;
   line-height: 1.25;
   font-weight: 700;
 }
@@ -1169,13 +1193,13 @@ main.empty-state {
   align-items: baseline;
   justify-content: space-between;
   gap: 0.25rem 0.75rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.4rem;
 }
 
 .panel-meta {
   display: flex;
   gap: 0.6rem;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   color: var(--ink-soft);
 }
 
@@ -1206,7 +1230,7 @@ main.empty-state {
   padding: 0.3rem 0.5rem;
   border-inline-start: 3px solid var(--danger);
   background: var(--danger-soft);
-  font-size: 0.92rem;
+  font-size: 0.75rem;
 }
 
 .inspector {
@@ -1217,20 +1241,8 @@ main.empty-state {
   display: none;
 }
 
-.zone-form {
-  margin-bottom: 0.5rem;
-}
-
-.zone-form .form-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.form-actions-row {
-  display: flex;
-  gap: 0.6rem;
+.zone-form .field-row .field {
+  margin-bottom: 0;
 }
 
 /* Buttons that float in the top right corner of the plan. */
@@ -1263,7 +1275,7 @@ main.empty-state {
 }
 
 .zoom-button {
-  width: 2rem;
+  width: 1.75rem;
   padding: 0;
   justify-content: center;
 }
@@ -1304,7 +1316,7 @@ main.empty-state {
 }
 
 .shortcuts-button {
-  width: 2rem;
+  width: 1.75rem;
   padding: 0;
   justify-content: center;
   border-radius: 999px;
@@ -1397,23 +1409,28 @@ kbd {
 /* Narrow screens: the panel goes under the plan. */
 
 @media (max-width: 900px) {
-  /* One column: the venue, the plan, then the tools and the panel under it, and the account. */
+  /* One column: the venue and the account, the tabs, the plan, then the tools and the panel. */
   .workspace {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto 1fr auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto 1fr;
     grid-template-areas:
-      "top"
-      "main"
-      "side"
-      "foot";
+      "top account"
+      "tabs tabs"
+      "main main"
+      "side side";
     height: auto;
     min-height: 100dvh;
   }
 
   .app-header,
-  .side-slot,
-  .side-foot {
+  .side-slot {
     border-inline-end: 0;
+  }
+
+  .account-actions {
+    padding-block: 0;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
   }
 
   .side-slot {
@@ -1465,12 +1482,16 @@ kbd {
   .app-header,
   .zone-bar,
   .toolbar,
-  .side-foot {
+  .panel-actions {
     padding-inline: 0.5rem;
   }
 }
 
-/* Touch screens (a tablet at the pass, a phone): everything you tap is at least 44 px. */
+/*
+ * Touch screens. A laptop with a touch screen (wide) gets 32 px, the top of the mouse range, so
+ * the panel stays dense; a tablet held upright or a phone gets 36 px. Both are well above the
+ * 24 px that WCAG 2.2 asks for (target size, AA).
+ */
 @media (pointer: coarse) {
   .button,
   .zone-tab,
@@ -1481,31 +1502,63 @@ kbd {
   .field input[type="number"],
   .field select,
   .venue-picker select {
-    min-height: 2.75rem;
+    min-height: 2rem;
   }
 
   .button {
-    min-width: 2.75rem;
+    min-width: 2rem;
     justify-content: center;
   }
 
-  .icon-button {
-    width: 2.75rem;
-    height: 2.75rem;
+  .icon-button,
+  .zoom-button,
+  .shortcuts-button {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .side-pick {
+    min-height: 2rem;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 900px) {
+  .button,
+  .zone-tab,
+  .language-switch button,
+  .field input[type="text"],
+  .field input[type="email"],
+  .field input[type="password"],
+  .field input[type="number"],
+  .field select,
+  .venue-picker select {
+    min-height: 2.25rem;
+  }
+
+  .button {
+    min-width: 2.25rem;
+    justify-content: center;
+  }
+
+  .icon-button,
+  .zoom-button,
+  .shortcuts-button {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .side-pick {
+    min-height: 2.25rem;
   }
 
   .segmented span {
-    padding-block: 0.7rem;
+    padding-block: 0.5rem;
   }
 
   .field-check input,
   .side-pick input {
-    width: 1.5rem;
-    height: 1.5rem;
-  }
-
-  .side-pick {
-    min-height: 2.75rem;
+    width: 1.25rem;
+    height: 1.25rem;
   }
 }
 

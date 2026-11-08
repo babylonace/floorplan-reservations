@@ -509,6 +509,81 @@ describe("the plan editor", () => {
     ).toBeInTheDocument();
   });
 
+  it("saves the zone's name and size with its tables, in one go", async () => {
+    const user = userEvent.setup();
+    const calls: string[] = [];
+    const updateZone = vi.fn<Api["updateZone"]>((_slug, id, fields) => {
+      calls.push(`zone ${String(fields.name)} ${String(fields.width)}`);
+      return Promise.resolve({ ...zone([]), ...fields, id });
+    });
+    const updateTable = vi.fn<Api["updateTable"]>((_slug, id, fields) => {
+      calls.push(`table ${id}`);
+      return Promise.resolve({ ...table({ id, label: "1", x: 100, y: 100 }), ...fields });
+    });
+    renderApp(signedInApi({ updateZone, updateTable }));
+
+    const name = await screen.findByLabelText("Nombre");
+    await user.clear(name);
+    await user.type(name, "Sala");
+    const width = screen.getByLabelText("Ancho (m)");
+    await user.clear(width);
+    await user.type(width, "6");
+    expect(screen.getByText("1 cambio sin guardar")).toBeInTheDocument();
+    await focusTable("1");
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByText("2 cambios sin guardar")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    expect(await screen.findByText("2 cambios guardados.")).toBeInTheDocument();
+    // A zone that gets smaller shrinks once its tables are saved.
+    expect(calls).toEqual(["zone Sala 1000", "table t1", "zone Sala 600"]);
+  });
+
+  it("grows the zone before saving the tables that use the new room", async () => {
+    const user = userEvent.setup();
+    const calls: string[] = [];
+    const updateZone = vi.fn<Api["updateZone"]>((_slug, id, fields) => {
+      calls.push(`zone ${String(fields.width)}`);
+      return Promise.resolve({ ...zone([]), ...fields, id });
+    });
+    const updateTable = vi.fn<Api["updateTable"]>((_slug, id, fields) => {
+      calls.push(`table ${id}`);
+      return Promise.resolve({ ...table({ id, label: "1", x: 100, y: 100 }), ...fields });
+    });
+    renderApp(signedInApi({ updateZone, updateTable }));
+
+    const width = await screen.findByLabelText("Ancho (m)");
+    await user.clear(width);
+    await user.type(width, "12");
+    await focusTable("1");
+    await user.keyboard("{ArrowRight}");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    expect(await screen.findByText("2 cambios guardados.")).toBeInTheDocument();
+    expect(calls).toEqual(["zone 1200", "table t1"]);
+  });
+
+  it("asks before leaving a zone whose name was changed and not saved", async () => {
+    const user = userEvent.setup();
+    const plan = floorPlan([
+      zone(TABLES),
+      zone([], { id: "zone-2", name: "Terraza", sortOrder: 1 }),
+    ]);
+    renderApp(signedInApi({ floorPlan: vi.fn(() => Promise.resolve(plan)) }));
+
+    await user.type(await screen.findByLabelText("Nombre"), " grande");
+    await user.click(screen.getByRole("button", { name: "Terraza" }));
+    const dialog = screen.getByRole("dialog", { name: "¿Descartar los cambios sin guardar?" });
+    await user.click(within(dialog).getByRole("button", { name: "Seguir editando" }));
+    expect(screen.getByLabelText("Nombre")).toHaveValue("Comedor grande");
+
+    await user.click(screen.getByRole("button", { name: "Descartar cambios" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Descartar cambios" }),
+    );
+    expect(screen.getByLabelText("Nombre")).toHaveValue("Comedor");
+    expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeDisabled();
+  });
+
   it("shows why a zone cannot be deleted", async () => {
     const user = userEvent.setup();
     const deleteZone = vi.fn<Api["deleteZone"]>(() =>

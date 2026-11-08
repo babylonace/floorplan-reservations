@@ -187,7 +187,26 @@ export function Workspace({
             ) : (
               venue && <span className="venue-name">{venue.name}</span>
             )}
+            <span className="account" title={t.header.signedInAs(account.email)}>
+              {account.email}
+            </span>
           </header>
+
+          <div className="account-actions">
+            <LanguageSwitch />
+            <button
+              type="button"
+              className="button button-quiet"
+              onClick={() => {
+                guarded(() => void signOut());
+              }}
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <path d="M8 4H4v12h4M12 6l4 4-4 4M16 10H8" />
+              </svg>
+              <ButtonLabel full={t.header.signOut} />
+            </button>
+          </div>
 
           {/* The editor's tools and panel land here (see Editor). */}
           <div className="side-slot" ref={setSideSlot} />
@@ -195,53 +214,55 @@ export function Workspace({
           {/* Fixed at the bottom of the window, next in keyboard order after the tools. */}
           <NoticeArea notice={notice} onClose={closeNotice} />
 
+          {venue && (
+            <nav className="zone-bar" aria-label={t.zones.listLabel}>
+              <ul>
+                {zones.map((candidate) => (
+                  <li key={candidate.id}>
+                    <button
+                      type="button"
+                      className="zone-tab"
+                      aria-current={candidate.id === zone?.id ? "true" : undefined}
+                      onClick={() => {
+                        if (candidate.id === zone?.id) return;
+                        guarded(() => {
+                          setDirty(0);
+                          setNotice(null);
+                          setZoneId(candidate.id);
+                        });
+                      }}
+                    >
+                      {candidate.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {editable && (
+                <button
+                  type="button"
+                  className="button button-quiet zone-add"
+                  onClick={() => {
+                    guarded(() => {
+                      setZoneError(null);
+                      setCreatingZone(true);
+                    });
+                  }}
+                >
+                  <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                    <path d="M8 3v10M3 8h10" />
+                  </svg>
+                  {t.zones.add}
+                </button>
+              )}
+            </nav>
+          )}
+
           {!venue ? (
             <main className="empty-state">
               <p>{t.venues.none}</p>
             </main>
           ) : (
             <main className="workspace-main" id="main" tabIndex={-1}>
-              <nav className="zone-bar" aria-label={t.zones.listLabel}>
-                <ul>
-                  {zones.map((candidate) => (
-                    <li key={candidate.id}>
-                      <button
-                        type="button"
-                        className="zone-tab"
-                        aria-current={candidate.id === zone?.id ? "true" : undefined}
-                        onClick={() => {
-                          if (candidate.id === zone?.id) return;
-                          guarded(() => {
-                            setDirty(0);
-                            setNotice(null);
-                            setZoneId(candidate.id);
-                          });
-                        }}
-                      >
-                        {candidate.name}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                {editable && (
-                  <button
-                    type="button"
-                    className="button button-quiet zone-add"
-                    onClick={() => {
-                      guarded(() => {
-                        setZoneError(null);
-                        setCreatingZone(true);
-                      });
-                    }}
-                  >
-                    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                      <path d="M8 3v10M3 8h10" />
-                    </svg>
-                    {t.zones.add}
-                  </button>
-                )}
-              </nav>
-
               {!editable && (
                 <p className="read-only-note" role="note">
                   {t.venues.readOnly}
@@ -290,27 +311,6 @@ export function Workspace({
               )}
             </main>
           )}
-
-          <footer className="side-foot">
-            <span className="account" title={t.header.signedInAs(account.email)}>
-              {account.email}
-            </span>
-            <div className="side-foot-row">
-              <LanguageSwitch />
-              <button
-                type="button"
-                className="button button-quiet"
-                onClick={() => {
-                  guarded(() => void signOut());
-                }}
-              >
-                <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                  <path d="M8 4H4v12h4M12 6l4 4-4 4M16 10H8" />
-                </svg>
-                <ButtonLabel full={t.header.signOut} />
-              </button>
-            </div>
-          </footer>
 
           {creatingZone && (
             <Modal
