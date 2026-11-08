@@ -502,6 +502,7 @@ describe("the plan editor", () => {
       width: 900,
       height: 800,
       sortOrder: 1,
+      guestSelectable: true,
     });
     expect(screen.getByRole("button", { name: "Terraza" })).toHaveAttribute("aria-current", "true");
     expect(

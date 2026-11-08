@@ -60,6 +60,10 @@ const zoneFields = {
     maximum: 10_000,
     description: "Zones are listed from the lowest number up.",
   },
+  guestSelectable: {
+    type: "boolean",
+    description: "Guests may ask for this zone on the public booking page.",
+  },
 } as const;
 
 const tableFields = {
@@ -131,6 +135,7 @@ interface ZoneBody {
   width?: number;
   height?: number;
   sortOrder?: number;
+  guestSelectable?: boolean;
 }
 
 interface TableBody {
@@ -155,6 +160,7 @@ interface ZoneRow {
   sort_order: number;
   width: number;
   height: number;
+  guest_selectable: boolean;
 }
 
 /** What a transaction decided; sent once it has committed. */
@@ -172,6 +178,7 @@ function toApiZone(row: ZoneRow) {
     sortOrder: row.sort_order,
     width: row.width,
     height: row.height,
+    guestSelectable: row.guest_selectable,
   };
 }
 
@@ -241,7 +248,7 @@ async function lockZones(
   zoneIds: string[],
 ): Promise<Map<string, ZoneRow>> {
   const { rows } = await client.query<ZoneRow>(
-    `select id, name, sort_order, width, height
+    `select id, name, sort_order, width, height, guest_selectable
        from zones
       where venue_id = $1 and id = any($2::uuid[]) and retired_at is null
       order by id
@@ -398,10 +405,17 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
           }
 
           const { rows } = await client.query<ZoneRow>(
-            `insert into zones (venue_id, name, sort_order, width, height)
-             values ($1, $2, $3, $4, $5)
-             returning id, name, sort_order, width, height`,
-            [venueId, body.name.trim(), body.sortOrder ?? 0, body.width, body.height],
+            `insert into zones (venue_id, name, sort_order, width, height, guest_selectable)
+             values ($1, $2, $3, $4, $5, $6)
+             returning id, name, sort_order, width, height, guest_selectable`,
+            [
+              venueId,
+              body.name.trim(),
+              body.sortOrder ?? 0,
+              body.width,
+              body.height,
+              body.guestSelectable ?? true,
+            ],
           );
           const zone = rows[0];
           if (!zone) throw new Error("Zone insert returned no row");
@@ -456,16 +470,25 @@ export const planEditorRoutes: FastifyPluginAsync<PlanEditorOptions> = (app, { p
             sort_order: body.sortOrder ?? zone.sort_order,
             width: body.width ?? zone.width,
             height: body.height ?? zone.height,
+            guest_selectable: body.guestSelectable ?? zone.guest_selectable,
           };
           const tables = await zoneTables(client, zone.id);
           const issues = newIssues(planZone(zone, tables), planZone(changed, tables));
           if (issues.length > 0) return planRefused(issues);
 
           const { rows } = await client.query<ZoneRow>(
-            `update zones set name = $2, sort_order = $3, width = $4, height = $5
+            `update zones
+                set name = $2, sort_order = $3, width = $4, height = $5, guest_selectable = $6
               where id = $1
-              returning id, name, sort_order, width, height`,
-            [zone.id, changed.name, changed.sort_order, changed.width, changed.height],
+              returning id, name, sort_order, width, height, guest_selectable`,
+            [
+              zone.id,
+              changed.name,
+              changed.sort_order,
+              changed.width,
+              changed.height,
+              changed.guest_selectable,
+            ],
           );
           const updated = rows[0];
           if (!updated) throw new Error("Zone update returned no row");

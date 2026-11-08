@@ -1256,6 +1256,11 @@ main.empty-state {
   margin-bottom: 0;
 }
 
+/* Room above the guest choice, so the small box is not a near miss for the size fields. */
+.zone-form .field-check {
+  margin: 0.5rem 0 0;
+}
+
 /* Buttons that float in the top right corner of the plan. */
 .plan-tools {
   position: absolute;

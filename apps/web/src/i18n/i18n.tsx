@@ -116,6 +116,11 @@ export function I18nProvider({ children, initial }: { children: ReactNode; initi
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
+/** The staff screens' languages, or null on a page that has its own (the booking page). */
+export function useOptionalI18n(): I18n | null {
+  return useContext(I18nContext);
+}
+
 export function useI18n(): I18n {
   const value = useContext(I18nContext);
   if (!value) throw new Error("useI18n needs an I18nProvider above it");

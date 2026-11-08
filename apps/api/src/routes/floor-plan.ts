@@ -30,13 +30,23 @@ const floorPlanResponse = {
       type: "array",
       items: {
         type: "object",
-        required: ["id", "name", "sortOrder", "width", "height", "tables", "issues"],
+        required: [
+          "id",
+          "name",
+          "sortOrder",
+          "width",
+          "height",
+          "guestSelectable",
+          "tables",
+          "issues",
+        ],
         properties: {
           id: { type: "string", format: "uuid" },
           name: { type: "string" },
           sortOrder: { type: "integer" },
           width: { type: "integer" },
           height: { type: "integer" },
+          guestSelectable: { type: "boolean" },
           tables: { type: "array", items: tableSchema },
           issues: {
             type: "array",
@@ -64,6 +74,7 @@ interface ZoneRow {
   sort_order: number;
   width: number;
   height: number;
+  guest_selectable: boolean;
 }
 
 export const floorPlanRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool }) => {
@@ -95,7 +106,7 @@ export const floorPlanRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool 
 
       const [zoneResult, tableResult] = await Promise.all([
         pool.query<ZoneRow>(
-          `select id, name, sort_order, width, height
+          `select id, name, sort_order, width, height, guest_selectable
              from zones
             where venue_id = $1 and retired_at is null
             order by sort_order, name`,
@@ -119,6 +130,7 @@ export const floorPlanRoutes: FastifyPluginAsync<{ pool: Pool }> = (app, { pool 
         return {
           ...plan,
           sortOrder: zone.sort_order,
+          guestSelectable: zone.guest_selectable,
           tables,
           issues: validateZone({ ...plan, tables }),
         };

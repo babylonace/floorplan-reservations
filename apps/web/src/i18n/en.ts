@@ -62,6 +62,9 @@ export const en = {
     width: "Width (m)",
     height: "Depth (m)",
     sizeHint: "In metres; decimals are fine, such as 4.5.",
+    guestSelectable: "Guests can choose it",
+    guestSelectableHint:
+      "On the booking page, guests can ask for this zone. When it is off, guests with no preference can still be seated here.",
     create: "Create zone",
     creating: "Creating…",
     created: (name: string) => `Zone “${name}” created.`,

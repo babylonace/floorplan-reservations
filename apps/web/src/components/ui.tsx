@@ -10,7 +10,7 @@ import {
 } from "react";
 import { clamp } from "../plan/geometry";
 import { parseMetres } from "../plan/units";
-import { LOCALE_NAMES, LOCALES, useI18n } from "../i18n/i18n";
+import { LOCALE_NAMES, LOCALES, useI18n, useOptionalI18n } from "../i18n/i18n";
 
 /** Small building blocks shared by the screens. */
 
@@ -43,23 +43,31 @@ export function useNotice(): (notice: NoticeMessage | null) => void {
  * moves when one appears. Both live regions are always in the page, so screen readers hear what
  * is put in them: errors at once, good news when they are free. Good news closes on its own
  * after a few seconds, but not while the pointer or the keyboard is on it.
+ *
+ * Pages with their own languages (the booking page) pass the close button's words.
  */
 export function NoticeArea({
   notice,
   onClose,
+  dismissLabel,
 }: {
   notice: NoticeMessage | null;
   onClose: () => void;
+  dismissLabel?: string;
 }) {
   // A new message is a new box, even with the same words, so its timer starts again.
   const key = notice ? noticeKey(notice) : 0;
   return (
     <div className="notice-area">
       <div role="status" className="notice-slot">
-        {notice?.tone === "success" && <NoticeBox key={key} notice={notice} onClose={onClose} />}
+        {notice?.tone === "success" && (
+          <NoticeBox key={key} notice={notice} onClose={onClose} dismissLabel={dismissLabel} />
+        )}
       </div>
       <div role="alert" className="notice-slot">
-        {notice?.tone === "error" && <NoticeBox key={key} notice={notice} onClose={onClose} />}
+        {notice?.tone === "error" && (
+          <NoticeBox key={key} notice={notice} onClose={onClose} dismissLabel={dismissLabel} />
+        )}
       </div>
     </div>
   );
@@ -77,8 +85,16 @@ function noticeKey(notice: NoticeMessage): number {
   return key;
 }
 
-function NoticeBox({ notice, onClose }: { notice: NoticeMessage; onClose: () => void }) {
-  const { t } = useI18n();
+function NoticeBox({
+  notice,
+  onClose,
+  dismissLabel,
+}: {
+  notice: NoticeMessage;
+  onClose: () => void;
+  dismissLabel: string | undefined;
+}) {
+  const i18n = useOptionalI18n();
   const [pointer, setPointer] = useState(false);
   const [focus, setFocus] = useState(false);
   /** Where the keyboard was before it came to the message, to go back there on closing. */
@@ -138,7 +154,7 @@ function NoticeBox({ notice, onClose }: { notice: NoticeMessage; onClose: () => 
           if (back?.isConnected) back.focus();
           else document.querySelector<HTMLElement>("main")?.focus();
         }}
-        aria-label={t.errors.dismiss}
+        aria-label={dismissLabel ?? i18n?.t.errors.dismiss ?? "Close"}
       >
         <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
           <path d="M4 4l8 8M12 4l-8 8" />

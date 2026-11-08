@@ -16,6 +16,8 @@ let app: FastifyInstance;
 beforeAll(async () => {
   mkdirSync(join(dir, "assets"), { recursive: true });
   writeFileSync(join(dir, "index.html"), "<!doctype html><title>Plan</title>");
+  mkdirSync(join(dir, "reservar"), { recursive: true });
+  writeFileSync(join(dir, "reservar", "index.html"), "<!doctype html><title>Book</title>");
   writeFileSync(join(dir, "assets", "index-abc123.js"), "console.log(1);");
   app = await buildApp({ pool, ...TEST_APP_OPTIONS, webDir: dir });
 });
@@ -36,6 +38,19 @@ describe("the built web app", () => {
     expect(response.headers["content-security-policy"]).toContain("frame-ancestors 'none'");
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
     expect(response.headers["cache-control"]).toBe("no-cache, must-revalidate");
+  });
+
+  it("serves the booking page at /reservar/<venue>, with the same headers", async () => {
+    const response = await app.inject({ method: "GET", url: "/reservar/sample-bistro" });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("<title>Book</title>");
+    expect(response.headers["content-security-policy"]).toBe(CONTENT_SECURITY_POLICY);
+    expect(response.headers["cache-control"]).toBe("no-cache, must-revalidate");
+    // Only venue slugs: nothing else under /reservar comes from the folder.
+    expect((await app.inject({ method: "GET", url: "/reservar/Not%20A%20Slug" })).statusCode).toBe(
+      400,
+    );
+    expect((await app.inject({ method: "GET", url: "/reservar/a/b" })).statusCode).toBe(404);
   });
 
   it("caches hashed assets for a year", async () => {

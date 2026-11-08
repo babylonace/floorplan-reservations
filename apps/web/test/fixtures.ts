@@ -30,6 +30,7 @@ export function zone(tables: Table[], overrides: Partial<PlanZone> = {}): PlanZo
     sortOrder: 0,
     width: 1000,
     height: 600,
+    guestSelectable: true,
     tables,
     issues: [],
     ...overrides,
@@ -69,6 +70,10 @@ export function fakeApi(overrides: Partial<Api> = {}): Api {
     createTable: notSet("createTable"),
     updateTable: notSet("updateTable"),
     deleteTable: notSet("deleteTable"),
+    bookingOptions: notSet("bookingOptions"),
+    bookingRules: notSet("bookingRules"),
+    availability: notSet("availability"),
+    book: notSet("book"),
     ...overrides,
   };
 }

@@ -1,0 +1,290 @@
+/*
+ * Public booking page. One quiet column on the editor's paper colours, as dense as the editor:
+ * 13 px text and 28 px controls with a mouse, more on touch screens (see the end).
+ */
+
+.booking {
+  min-height: 100dvh;
+  font-size: 0.8125rem;
+  background: var(--chrome);
+}
+
+.booking-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.booking-venue {
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.booking-main {
+  max-width: 32rem;
+  margin: 1rem auto;
+  padding: 1rem 1.25rem 1.25rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.booking-main h1 {
+  margin-bottom: 0.75rem;
+  font-size: 1.25rem;
+}
+
+.booking-form > fieldset {
+  margin-top: 0.5rem;
+}
+
+.booking-form legend {
+  margin-bottom: 0.2rem;
+}
+
+.booking .field textarea,
+.booking .field input[type="tel"] {
+  width: 100%;
+  min-height: 1.75rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid #8a9a93;
+  border-radius: var(--radius-small);
+  background: #ffffff;
+}
+
+.booking .field textarea {
+  padding-block: 0.3rem;
+  resize: vertical;
+}
+
+.booking .field input[aria-invalid="true"],
+.booking .field textarea[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.field-optional {
+  font-weight: 400;
+}
+
+.booking-problem {
+  display: grid;
+  justify-items: start;
+  gap: 0.5rem;
+}
+
+/* Calendar */
+
+.calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.calendar-month {
+  font-size: 0.875rem;
+}
+
+.calendar-month::first-letter {
+  text-transform: uppercase;
+}
+
+.calendar-nav[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[dir="rtl"] .flip-rtl {
+  transform: scaleX(-1);
+}
+
+.calendar-grid {
+  width: 100%;
+  border-spacing: 0.15rem;
+  table-layout: fixed;
+}
+
+.calendar-grid th {
+  padding-block: 0.2rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.calendar-grid td {
+  padding: 0;
+}
+
+.calendar-day,
+.slot {
+  width: 100%;
+  min-height: 1.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.calendar-day:hover:not([aria-disabled="true"]),
+.slot:hover:not([aria-disabled="true"]) {
+  border-color: var(--ink-soft);
+}
+
+.calendar-day[aria-pressed="true"],
+.slot[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #ffffff;
+}
+
+/* Days without bookings and full times: still read out, but greyed and not clickable. */
+.calendar-day[aria-disabled="true"],
+.slot[aria-disabled="true"] {
+  border-color: transparent;
+  background: transparent;
+  color: #7d8c86;
+  font-weight: 400;
+  cursor: default;
+}
+
+.slot[aria-disabled="true"] {
+  text-decoration: line-through;
+}
+
+/* Times */
+
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(3.75rem, 1fr));
+  gap: 0.3rem;
+}
+
+.zone-full {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--marigold);
+  border-radius: var(--radius-small);
+  background: #fdf6e3;
+}
+
+.zone-full > p:first-child {
+  font-weight: 600;
+}
+
+.zone-full-label {
+  margin-bottom: 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.zone-full-zones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+/* Details */
+
+.booking-details {
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.booking-contact-error {
+  margin: -0.35rem 0 0.5rem;
+}
+
+.booking-privacy {
+  margin: 0.25rem 0 0.6rem;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.booking-summary {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.booking-done {
+  display: grid;
+  justify-items: start;
+  gap: 0.4rem;
+}
+
+.booking-done h2 {
+  font-size: 1.0625rem;
+  color: var(--ok);
+}
+
+/* The editor shifts its messages past its side column; this page has none. */
+.booking .notice-area {
+  inset-inline: 0.75rem;
+  margin-inline: auto;
+  width: min(30rem, calc(100vw - 1.5rem));
+}
+
+/* Phones: the page is the column, with the usual 16 px on each side. */
+@media (max-width: 600px) {
+  .booking-main {
+    margin: 0;
+    padding: 0.75rem 1rem 1.25rem;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .booking:has(.notice) .booking-main {
+    padding-bottom: 6rem;
+  }
+}
+
+/*
+ * Touch screens: 32 px on a wide touch screen, 36 px on a tablet held upright and 44 px on a
+ * phone, where the thumb does all the work.
+ */
+@media (pointer: coarse) {
+  .calendar-day,
+  .slot,
+  .booking .field input[type="tel"],
+  .booking .field textarea {
+    min-height: 2rem;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 900px) {
+  .calendar-day,
+  .slot,
+  .booking .field input[type="tel"],
+  .booking .field textarea {
+    min-height: 2.25rem;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 600px) {
+  .calendar-day,
+  .slot,
+  .booking .button,
+  .booking .language-switch button,
+  .booking .field input,
+  .booking .field select,
+  .booking .field textarea {
+    min-height: 2.75rem;
+  }
+}
+
+@media (forced-colors: active) {
+  .calendar-day[aria-pressed="true"],
+  .slot[aria-pressed="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+}

@@ -1,5 +1,17 @@
 import type { PlanIssue } from "@floorplan-reservations/engine";
-import type { Account, FloorPlan, Table, TableFields, Zone, ZoneFields } from "./types";
+import type {
+  Account,
+  Availability,
+  Booking,
+  BookingOptions,
+  BookingRequest,
+  BookingRules,
+  FloorPlan,
+  Table,
+  TableFields,
+  Zone,
+  ZoneFields,
+} from "./types";
 
 /**
  * Talks to the API on the same address the page came from. The session lives in an HttpOnly
@@ -86,6 +98,17 @@ export const api = {
     request<Table>("PATCH", `${venue(slug)}/tables/${encodeURIComponent(tableId)}`, fields),
   deleteTable: (slug: string, tableId: string) =>
     request<undefined>("DELETE", `${venue(slug)}/tables/${encodeURIComponent(tableId)}`),
+
+  bookingOptions: (slug: string) =>
+    request<BookingOptions>("GET", `${venue(slug)}/booking-options`),
+  bookingRules: (slug: string) => request<BookingRules>("GET", `${venue(slug)}/booking-rules`),
+  availability: (slug: string, date: string, partySize: number) =>
+    request<Availability>(
+      "GET",
+      `${venue(slug)}/availability?${new URLSearchParams({ date, partySize: String(partySize) }).toString()}`,
+    ),
+  book: (slug: string, booking: BookingRequest) =>
+    request<Booking>("POST", `${venue(slug)}/reservations`, booking),
 };
 
 export type Api = typeof api;

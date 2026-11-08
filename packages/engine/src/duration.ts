@@ -32,3 +32,8 @@ export function durationFor(
   const rule = sorted.find((candidate) => partySize <= candidate.upToPartySize);
   return rule ? rule.minutes : null;
 }
+
+/** The biggest party that can book online: the one the last rule covers. */
+export function largestParty(rules: readonly DurationRule[] = DEFAULT_DURATION_RULES): number {
+  return Math.max(0, ...rules.map((rule) => rule.upToPartySize));
+}

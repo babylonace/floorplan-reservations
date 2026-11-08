@@ -61,6 +61,22 @@ function ZoneFieldInputs({
           }}
         />
       </div>
+      <div className="field field-check">
+        <input
+          id={`${ids}-guests`}
+          type="checkbox"
+          disabled={disabled}
+          checked={fields.guestSelectable}
+          aria-describedby={`${ids}-guests-hint`}
+          onChange={(event) => {
+            onChange({ ...fields, guestSelectable: event.target.checked });
+          }}
+        />
+        <label htmlFor={`${ids}-guests`}>{t.zones.guestSelectable}</label>
+        <p id={`${ids}-guests-hint`} className="visually-hidden">
+          {t.zones.guestSelectableHint}
+        </p>
+      </div>
     </>
   );
 }

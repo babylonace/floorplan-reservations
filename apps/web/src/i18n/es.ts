@@ -48,6 +48,9 @@ export const es: DeepPartial<Messages> = {
     width: "Ancho (m)",
     height: "Fondo (m)",
     sizeHint: "En metros; con decimales, como 4,5.",
+    guestSelectable: "Se puede elegir al reservar",
+    guestSelectableHint:
+      "En la página de reservas, los clientes pueden pedir esta zona. Si no, quien no tenga preferencia puede acabar aquí igualmente.",
     create: "Crear zona",
     creating: "Creando…",
     created: (name: string) => `Zona «${name}» creada.`,

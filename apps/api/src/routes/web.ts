@@ -2,9 +2,11 @@ import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import fastifyStatic from "@fastify/static";
 import type { FastifyPluginAsync } from "fastify";
+import { slugParam } from "./shared.js";
 
 /**
- * Serves the built staff web app (apps/web/dist) from the same address as the API.
+ * Serves the built web app (apps/web/dist) from the same address as the API: the staff editor
+ * at /, and each venue's public booking page at /reservar/<venue slug>.
  *
  * Same origin on purpose: the session cookie is SameSite=Strict with the __Host- prefix, and the
  * API turns away requests a browser marks as coming from another site. Served from here, the
@@ -27,6 +29,9 @@ export const CONTENT_SECURITY_POLICY = [
   "form-action 'self'",
   "frame-ancestors 'none'",
 ].join("; ");
+
+/** The booking page's file inside the built app. One page for every venue. */
+const BOOKING_PAGE = "reservar/index.html";
 
 /** Throws when `dir` does not hold a built web app. */
 export function checkWebDir(dir: string): void {
@@ -56,4 +61,18 @@ export const webRoutes: FastifyPluginAsync<{ dir: string }> = async (app, { dir 
       );
     },
   });
+
+  // Older builds have no booking page; then the path is simply not there.
+  if (existsSync(join(root, BOOKING_PAGE))) {
+    app.get<{ Params: { slug: string } }>(
+      "/reservar/:slug",
+      {
+        schema: {
+          hide: true,
+          params: { type: "object", required: ["slug"], properties: { slug: slugParam } },
+        },
+      },
+      (_request, reply) => reply.sendFile(BOOKING_PAGE),
+    );
+  }
 };

@@ -96,13 +96,17 @@ export const tableSchema = {
 
 export const zoneSchema = {
   type: "object",
-  required: ["id", "name", "sortOrder", "width", "height"],
+  required: ["id", "name", "sortOrder", "width", "height", "guestSelectable"],
   properties: {
     id: { type: "string", format: "uuid" },
     name: { type: "string" },
     sortOrder: { type: "integer" },
     width: { type: "integer" },
     height: { type: "integer" },
+    guestSelectable: {
+      type: "boolean",
+      description: "Guests may ask for this zone on the public booking page.",
+    },
   },
 } as const;
 
