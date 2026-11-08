@@ -4,7 +4,7 @@ import { useI18n } from "../i18n/i18n";
 import { isNewId } from "../plan/draft";
 import { DEFAULT_TABLE_COLOR, TABLE_COLORS, tableColor } from "../plan/colors";
 import { MAX_CM, MIN_SIZE_CM, normalizeRotation } from "../plan/geometry";
-import { NumberField } from "./ui";
+import { MetreField, NumberField } from "./ui";
 
 /** Every detail of the selected table, as form fields. Changes go into the draft at once. */
 export function TableInspector({
@@ -105,23 +105,21 @@ export function TableInspector({
         </div>
 
         <div className="field-row">
-          <NumberField
+          <MetreField
             label={t.tables.width}
             value={table.width}
             min={MIN_SIZE_CM}
             max={MAX_CM}
-            step={5}
             disabled={!editable}
             onChange={(width) => {
               onChange({ width });
             }}
           />
-          <NumberField
+          <MetreField
             label={t.tables.height}
             value={table.height}
             min={MIN_SIZE_CM}
             max={MAX_CM}
-            step={5}
             disabled={!editable}
             onChange={(height) => {
               onChange({ height });
@@ -129,30 +127,31 @@ export function TableInspector({
           />
         </div>
 
-        <div className="field-row">
-          <NumberField
-            label={t.tables.x}
-            value={table.x}
-            min={-MAX_CM}
-            max={MAX_CM}
-            step={5}
-            disabled={!editable}
-            onChange={(x) => {
-              onChange({ x });
-            }}
-          />
-          <NumberField
-            label={t.tables.y}
-            value={table.y}
-            min={-MAX_CM}
-            max={MAX_CM}
-            step={5}
-            disabled={!editable}
-            onChange={(y) => {
-              onChange({ y });
-            }}
-          />
-        </div>
+        <fieldset className="field">
+          <legend>{t.tables.position}</legend>
+          <div className="field-row">
+            <MetreField
+              label={t.tables.x}
+              value={table.x}
+              min={-MAX_CM}
+              max={MAX_CM}
+              disabled={!editable}
+              onChange={(x) => {
+                onChange({ x });
+              }}
+            />
+            <MetreField
+              label={t.tables.y}
+              value={table.y}
+              min={-MAX_CM}
+              max={MAX_CM}
+              disabled={!editable}
+              onChange={(y) => {
+                onChange({ y });
+              }}
+            />
+          </div>
+        </fieldset>
 
         <NumberField
           label={t.tables.rotation}

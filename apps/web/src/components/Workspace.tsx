@@ -4,7 +4,15 @@ import type { Account, FloorPlan, ZoneFields } from "../api/types";
 import { describeError, isSignedOut } from "../errors";
 import { useI18n } from "../i18n/i18n";
 import { Editor } from "./Editor";
-import { ConfirmDialog, LanguageSwitch, Modal, Notice, type NoticeMessage } from "./ui";
+import {
+  ButtonLabel,
+  ConfirmDialog,
+  LanguageSwitch,
+  Modal,
+  NoticeArea,
+  NoticeContext,
+  type NoticeMessage,
+} from "./ui";
 import { ZoneForm } from "./ZonePanel";
 
 /** Signed in: pick a venue and a zone, then edit it. */
@@ -126,216 +134,221 @@ export function Workspace({
     }
   }
 
+  const closeNotice = useCallback(() => {
+    setNotice(null);
+  }, []);
+
   const reload = useCallback(() => (slug ? load(slug) : Promise.resolve(null)), [slug, load]);
 
   return (
-    <div className="workspace">
-      <header className="app-header">
-        <div className="brand">
-          <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false" className="brand-mark">
-            <rect x="3" y="3" width="26" height="26" rx="3" className="bm-floor" />
-            <circle cx="11" cy="11" r="4" className="bm-oak" />
-            <rect x="16" y="16" width="9" height="9" rx="1.5" className="bm-walnut" />
-          </svg>
-          <span className="brand-name">{t.app.name}</span>
-        </div>
-
-        {account.venues.length > 1 ? (
-          <div className="venue-picker">
-            <label htmlFor={`${ids}-venue`}>{t.header.venue}</label>
-            <select
-              id={`${ids}-venue`}
-              value={slug ?? ""}
-              onChange={(event) => {
-                const next = event.target.value;
-                guarded(() => {
-                  setDirty(0);
-                  setPlan(null);
-                  setZoneId(null);
-                  setSlug(next);
-                });
-              }}
-            >
-              {account.venues.map((option) => (
-                <option key={option.slug} value={option.slug}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
+    <NoticeContext.Provider value={setNotice}>
+      <div className="workspace">
+        <header className="app-header">
+          <div className="brand">
+            <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false" className="brand-mark">
+              <rect x="3" y="3" width="26" height="26" rx="3" className="bm-floor" />
+              <circle cx="11" cy="11" r="4" className="bm-oak" />
+              <rect x="16" y="16" width="9" height="9" rx="1.5" className="bm-walnut" />
+            </svg>
+            <span className="brand-name">{t.app.name}</span>
           </div>
-        ) : (
-          venue && <span className="venue-name">{venue.name}</span>
-        )}
 
-        <div className="header-end">
-          <LanguageSwitch />
-          <span className="account" title={t.header.signedInAs(account.email)}>
-            {account.email}
-          </span>
-          <button
-            type="button"
-            className="button button-quiet"
-            onClick={() => {
-              guarded(() => void signOut());
-            }}
-          >
-            {t.header.signOut}
-          </button>
-        </div>
-      </header>
-
-      {!venue ? (
-        <main className="empty-state">
-          <p>{t.venues.none}</p>
-        </main>
-      ) : (
-        <main className="workspace-main" id="main" tabIndex={-1}>
-          <nav className="zone-bar" aria-label={t.zones.listLabel}>
-            <ul>
-              {zones.map((candidate) => (
-                <li key={candidate.id}>
-                  <button
-                    type="button"
-                    className="zone-tab"
-                    aria-current={candidate.id === zone?.id ? "true" : undefined}
-                    onClick={() => {
-                      if (candidate.id === zone?.id) return;
-                      guarded(() => {
-                        setDirty(0);
-                        setZoneId(candidate.id);
-                      });
-                    }}
-                  >
-                    {candidate.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {editable && (
-              <button
-                type="button"
-                className="button button-quiet zone-add"
-                onClick={() => {
+          {account.venues.length > 1 ? (
+            <div className="venue-picker">
+              <label htmlFor={`${ids}-venue`}>{t.header.venue}</label>
+              <select
+                id={`${ids}-venue`}
+                value={slug ?? ""}
+                onChange={(event) => {
+                  const next = event.target.value;
                   guarded(() => {
-                    setZoneError(null);
-                    setCreatingZone(true);
+                    setDirty(0);
+                    setNotice(null);
+                    setPlan(null);
+                    setZoneId(null);
+                    setSlug(next);
                   });
                 }}
               >
-                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                  <path d="M8 3v10M3 8h10" />
-                </svg>
-                {t.zones.add}
-              </button>
-            )}
-          </nav>
-
-          {!editable && (
-            <p className="read-only-note" role="note">
-              {t.venues.readOnly}
-            </p>
-          )}
-
-          {notice && (
-            <Notice
-              notice={notice}
-              onClose={() => {
-                setNotice(null);
-              }}
-            />
-          )}
-
-          {loadError !== null && !plan ? (
-            <div className="empty-state" role="alert">
-              <p>
-                {t.venues.loadFailed} {describeError(t, loadError, "load")}
-              </p>
-              <button
-                type="button"
-                className="button"
-                onClick={() => {
-                  if (slug) void load(slug);
-                }}
-              >
-                {t.venues.retry}
-              </button>
+                {account.venues.map((option) => (
+                  <option key={option.slug} value={option.slug}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
             </div>
-          ) : !plan || plan.venue.slug !== slug ? (
-            <p className="empty-state" role="status">
-              {t.venues.loadingPlan}
-            </p>
-          ) : zone ? (
-            <Editor
-              key={`${plan.venue.slug}:${zone.id}`}
-              slug={plan.venue.slug}
-              zone={zone}
-              editable={editable}
-              reload={reload}
-              onDirtyChange={setDirty}
-              onSessionLost={onSessionLost}
-              onZoneDeleted={(name) => {
-                setDirty(0);
-                setZoneId(null);
-                setNotice({ tone: "success", text: t.zones.removed(name) });
-                void reload();
-              }}
-            />
           ) : (
-            <div className="empty-state">
-              <p>{editable ? t.zones.none : t.zones.noneReadOnly}</p>
-            </div>
+            venue && <span className="venue-name">{venue.name}</span>
           )}
-        </main>
-      )}
 
-      {creatingZone && (
-        <Modal
-          title={t.zones.newTitle}
-          onClose={() => {
-            setCreatingZone(false);
-          }}
-        >
-          {zoneError && (
-            <p className="inline-error" role="alert">
-              {zoneError}
-            </p>
-          )}
-          <ZoneForm
-            initial={{
-              name: "",
-              width: 1000,
-              height: 800,
-              sortOrder: Math.max(-1, ...zones.map((candidate) => candidate.sortOrder)) + 1,
-            }}
-            submitLabel={t.zones.create}
-            busyLabel={t.zones.creating}
-            busy={busy}
-            onSubmit={(fields) => void createZone(fields)}
-            onCancel={() => {
+          <div className="header-end">
+            <LanguageSwitch />
+            <span className="account" title={t.header.signedInAs(account.email)}>
+              {account.email}
+            </span>
+            <button
+              type="button"
+              className="button button-quiet"
+              onClick={() => {
+                guarded(() => void signOut());
+              }}
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <path d="M8 4H4v12h4M12 6l4 4-4 4M16 10H8" />
+              </svg>
+              <ButtonLabel full={t.header.signOut} />
+            </button>
+          </div>
+        </header>
+
+        {/* Fixed at the bottom of the window, but next in keyboard order after the header. */}
+        <NoticeArea notice={notice} onClose={closeNotice} />
+
+        {!venue ? (
+          <main className="empty-state">
+            <p>{t.venues.none}</p>
+          </main>
+        ) : (
+          <main className="workspace-main" id="main" tabIndex={-1}>
+            <nav className="zone-bar" aria-label={t.zones.listLabel}>
+              <ul>
+                {zones.map((candidate) => (
+                  <li key={candidate.id}>
+                    <button
+                      type="button"
+                      className="zone-tab"
+                      aria-current={candidate.id === zone?.id ? "true" : undefined}
+                      onClick={() => {
+                        if (candidate.id === zone?.id) return;
+                        guarded(() => {
+                          setDirty(0);
+                          setNotice(null);
+                          setZoneId(candidate.id);
+                        });
+                      }}
+                    >
+                      {candidate.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {editable && (
+                <button
+                  type="button"
+                  className="button button-quiet zone-add"
+                  onClick={() => {
+                    guarded(() => {
+                      setZoneError(null);
+                      setCreatingZone(true);
+                    });
+                  }}
+                >
+                  <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                    <path d="M8 3v10M3 8h10" />
+                  </svg>
+                  {t.zones.add}
+                </button>
+              )}
+            </nav>
+
+            {!editable && (
+              <p className="read-only-note" role="note">
+                {t.venues.readOnly}
+              </p>
+            )}
+
+            {loadError !== null && !plan ? (
+              <div className="empty-state" role="alert">
+                <p>
+                  {t.venues.loadFailed} {describeError(t, loadError, "load")}
+                </p>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => {
+                    if (slug) void load(slug);
+                  }}
+                >
+                  {t.venues.retry}
+                </button>
+              </div>
+            ) : !plan || plan.venue.slug !== slug ? (
+              <p className="empty-state" role="status">
+                {t.venues.loadingPlan}
+              </p>
+            ) : zone ? (
+              <Editor
+                key={`${plan.venue.slug}:${zone.id}`}
+                slug={plan.venue.slug}
+                zone={zone}
+                editable={editable}
+                reload={reload}
+                onDirtyChange={setDirty}
+                onSessionLost={onSessionLost}
+                onZoneDeleted={(name) => {
+                  setDirty(0);
+                  setZoneId(null);
+                  setNotice({ tone: "success", text: t.zones.removed(name) });
+                  void reload();
+                }}
+              />
+            ) : (
+              <div className="empty-state">
+                <p>{editable ? t.zones.none : t.zones.noneReadOnly}</p>
+              </div>
+            )}
+          </main>
+        )}
+
+        {creatingZone && (
+          <Modal
+            title={t.zones.newTitle}
+            onClose={() => {
               setCreatingZone(false);
             }}
-            cancelLabel={t.dialog.cancel}
-          />
-        </Modal>
-      )}
+          >
+            {zoneError && (
+              <p className="inline-error" role="alert">
+                {zoneError}
+              </p>
+            )}
+            <ZoneForm
+              initial={{
+                name: "",
+                width: 1000,
+                height: 800,
+                sortOrder: Math.max(-1, ...zones.map((candidate) => candidate.sortOrder)) + 1,
+              }}
+              submitLabel={t.zones.create}
+              busyLabel={t.zones.creating}
+              busy={busy}
+              onSubmit={(fields) => void createZone(fields)}
+              onCancel={() => {
+                setCreatingZone(false);
+              }}
+              cancelLabel={t.dialog.cancel}
+            />
+          </Modal>
+        )}
 
-      {pendingAction && zone && (
-        <ConfirmDialog
-          title={t.save.discardTitle}
-          body={t.save.discardBody(dirty, zone.name)}
-          confirm={t.save.confirmDiscard}
-          cancel={t.save.keepEditing}
-          danger
-          onConfirm={() => {
-            const action = pendingAction;
-            setPendingAction(null);
-            action();
-          }}
-          onCancel={() => {
-            setPendingAction(null);
-          }}
-        />
-      )}
-    </div>
+        {pendingAction && zone && (
+          <ConfirmDialog
+            title={t.save.discardTitle}
+            body={t.save.discardBody(dirty, zone.name)}
+            confirm={t.save.confirmDiscard}
+            cancel={t.save.keepEditing}
+            danger
+            onConfirm={() => {
+              const action = pendingAction;
+              setPendingAction(null);
+              action();
+            }}
+            onCancel={() => {
+              setPendingAction(null);
+            }}
+          />
+        )}
+      </div>
+    </NoticeContext.Provider>
   );
 }

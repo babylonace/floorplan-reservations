@@ -57,9 +57,9 @@ export const en = {
     noneReadOnly: "This venue has no zones yet.",
     newTitle: "New zone",
     name: "Name",
-    width: "Width (cm)",
-    height: "Depth (cm)",
-    sizeHint: "1 m is 100 cm. A room of 12 × 8 m is 1200 × 800 cm.",
+    width: "Width (m)",
+    height: "Depth (m)",
+    sizeHint: "In metres. Decimals are fine: 4.5 is four and a half metres.",
     sortOrder: "Position in the list",
     sortOrderHint: "Zones with lower numbers come first.",
     create: "Create zone",
@@ -79,6 +79,9 @@ export const en = {
   tables: {
     addRect: "Add rectangular table",
     addRound: "Add round table",
+    /** On narrow screens, next to the shape; the full name above is what screen readers hear. */
+    addRectShort: "Rectangular",
+    addRoundShort: "Round",
     panelTitle: (label: string) => `Table ${label}`,
     label: "Name or number",
     labelRequired: "Give the table a name or number.",
@@ -87,11 +90,12 @@ export const en = {
     round: "Round",
     minSeats: "Fewest guests",
     maxSeats: "Most guests",
-    width: "Width (cm)",
-    height: "Depth (cm)",
+    width: "Width (m)",
+    height: "Depth (m)",
     rotation: "Turn (degrees)",
-    x: "From the left (cm)",
-    y: "From the top (cm)",
+    position: "Position (m)",
+    x: "From the left",
+    y: "From the top",
     bookable: "Can be booked online",
     bookableHint: "When unticked, the table stays on the plan but guests cannot book it online.",
     color: "Colour",
@@ -123,7 +127,7 @@ export const en = {
         d.minSeats === d.maxSeats
           ? `for ${String(d.maxSeats)}`
           : `for ${String(d.minSeats)} to ${String(d.maxSeats)}`,
-        `${d.x} cm from the left and ${d.y} cm from the top`,
+        `${d.x} from the left and ${d.y} from the top`,
         d.rotation === 0 ? "" : `turned ${String(d.rotation)} degrees`,
         d.bookable ? "" : "not bookable online",
         d.problems === 0 ? "" : plural(d.problems, "1 problem", `${String(d.problems)} problems`),
@@ -158,8 +162,10 @@ export const en = {
     allSaved: "All changes saved",
     needsLabels: "Every table needs a name or number before saving.",
     save: "Save changes",
+    saveShort: "Save",
     saving: "Saving…",
     discard: "Discard changes",
+    discardShort: "Discard",
     saved: (n: number) => plural(n, "Change saved.", `${String(n)} changes saved.`),
     partial: (saved: number, failed: number) =>
       `${plural(saved, "1 change was saved", `${String(saved)} changes were saved`)}; ${plural(failed, "1 was not", `${String(failed)} were not`)}. They are still on the plan, so you can fix them and save again.`,
@@ -178,11 +184,11 @@ export const en = {
     confirmDiscard: "Discard changes",
   },
   announce: {
-    moved: (label: string, x: string, y: string) => `Table ${label} at ${x}, ${y} cm.`,
+    moved: (label: string, x: string, y: string) => `Table ${label} at ${x}, ${y}.`,
     rotated: (label: string, degrees: number) =>
       `Table ${label} turned ${String(degrees)} degrees.`,
     resized: (label: string, width: string, depth: string) =>
-      `Table ${label} is now ${width} by ${depth} cm.`,
+      `Table ${label} is now ${width} by ${depth}.`,
     removed: (label: string) => `Table ${label} removed. Save to make it final.`,
     added: (label: string) => `Table ${label} added.`,
   },
@@ -209,6 +215,8 @@ export const en = {
     zoneInvalid: "The zone cannot be that small, because:",
     rejected: "the server did not accept one of the values. Check the fields and try again.",
     dismiss: "Close message",
+    metres: (min: string, max: string) =>
+      `Type a length between ${min} and ${max}, such as 1.2. Leaving the field keeps the last good one.`,
   },
   dialog: {
     cancel: "Cancel",

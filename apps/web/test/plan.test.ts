@@ -23,6 +23,7 @@ import {
   toTableFrame,
 } from "../src/plan/geometry";
 import { saveChanges } from "../src/plan/save";
+import { parseMetres } from "../src/plan/units";
 import { table, zone } from "./fixtures";
 
 describe("geometry", () => {
@@ -280,5 +281,25 @@ describe("saving", () => {
       },
     ]);
     expect(result.created.get("new:3")?.id).toBe("stored-id");
+  });
+});
+
+describe("metres", () => {
+  it("reads a comma or a point as the decimal mark and gives whole centimetres", () => {
+    expect(parseMetres("1,2")).toBe(120);
+    expect(parseMetres("1.2")).toBe(120);
+    expect(parseMetres(" 12 ")).toBe(1200);
+    expect(parseMetres("0,75 m")).toBe(75);
+    expect(parseMetres(",5")).toBe(50);
+    expect(parseMetres("3,")).toBe(300);
+    expect(parseMetres("1,005")).toBe(101);
+    expect(parseMetres("-1,5")).toBe(-150);
+    expect(parseMetres("-0")).toBe(0);
+  });
+
+  it("refuses what is not a length", () => {
+    for (const text of ["", " ", "m", "abc", "1,2,3", "1.200,5", "1 2", "1e3", ",", "--1"]) {
+      expect(parseMetres(text)).toBeNull();
+    }
   });
 });

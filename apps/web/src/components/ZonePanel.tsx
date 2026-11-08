@@ -2,7 +2,7 @@ import { useId, useState, type SubmitEvent } from "react";
 import type { Zone, ZoneFields } from "../api/types";
 import { useI18n } from "../i18n/i18n";
 import { MAX_CM } from "../plan/geometry";
-import { NumberField } from "./ui";
+import { MetreField, NumberField } from "./ui";
 
 /** The fields of a zone. Used to create one and to change the one on screen. */
 export function ZoneForm({
@@ -58,8 +58,9 @@ export function ZoneForm({
           />
         </div>
         <div className="field-row">
-          <NumberField
+          <MetreField
             label={t.zones.width}
+            step={10}
             value={fields.width}
             min={1}
             max={MAX_CM}
@@ -68,8 +69,9 @@ export function ZoneForm({
               setFields({ ...fields, width });
             }}
           />
-          <NumberField
+          <MetreField
             label={t.zones.height}
+            step={10}
             value={fields.height}
             min={1}
             max={MAX_CM}
