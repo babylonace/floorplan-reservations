@@ -1,0 +1,37 @@
+{
+  "name": "floorplan-reservations",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Table reservations for restaurants, driven by a floor plan the venue draws itself. Node, TypeScript and PostgreSQL.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b && tsc -p packages/engine/test && tsc -p apps/api/test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test",
+    "dev": "tsc -b && npm run dev -w @floorplan-reservations/api",
+    "db:migrate": "tsc -b && node apps/api/dist/migrate-cli.js",
+    "db:seed": "tsc -b && node apps/api/dist/seed-cli.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.2",
+    "eslint": "^10.14.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0"
+  }
+}

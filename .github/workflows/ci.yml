@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Third-party actions are pinned by commit SHA. Dependabot proposes updates weekly.
+jobs:
+  checks:
+    name: Format, lint, types and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18-alpine@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395
+        env:
+          POSTGRES_USER: floorplan
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: floorplan_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U floorplan -d floorplan_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      TEST_DATABASE_URL: postgres://floorplan:ci-only-password@localhost:5432/floorplan_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  compose:
+    name: Docker Compose starts and answers
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and start
+        run: docker compose up --build --detach --wait --wait-timeout 120
+      - name: Load the sample venue
+        run: docker compose exec -T api node apps/api/dist/seed-cli.js
+      - name: Call the API
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:3000/health
+          curl --fail --silent --show-error http://127.0.0.1:3000/venues/sample-bistro/floor-plan \
+            | jq --exit-status '.zones | length == 2'
+          curl --fail --silent --show-error --output /dev/null http://127.0.0.1:3000/openapi.json
+      - name: Show logs
+        if: failure()
+        run: docker compose logs
+      - name: Stop
+        if: always()
+        run: docker compose down --volumes
