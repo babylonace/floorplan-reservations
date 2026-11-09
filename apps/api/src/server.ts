@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { buildApp } from "./app.js";
 import { loadConfig, loadDotEnvIfPresent } from "./config.js";
 import { createPool } from "./db.js";
+import { smtpMailer } from "./email/mailer.js";
 
 loadDotEnvIfPresent();
 const config = loadConfig();
@@ -20,7 +21,14 @@ const app = await buildApp({
   bookingRateLimit: config.bookingRateLimit,
   loginRateLimit: config.loginRateLimit,
   webDir,
+  mailer: config.smtp ? smtpMailer(config.smtp) : undefined,
 });
+
+app.log.info(
+  config.smtp
+    ? `E-mails go out through ${config.smtp.host}:${String(config.smtp.port)}`
+    : "No SMTP_HOST: e-mails are written to the log instead of being sent",
+);
 
 app.addHook("onClose", async () => {
   await pool.end();

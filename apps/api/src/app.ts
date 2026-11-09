@@ -2,6 +2,8 @@ import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import type { Pool } from "./db.js";
+import { logMailer, type Mailer } from "./email/mailer.js";
+import { startEmailWorker } from "./email/outbox.js";
 import { authRoutes, sessionSecurityScheme, type RateLimit } from "./routes/auth.js";
 import { bookingRulesRoutes } from "./routes/booking-rules.js";
 import { floorPlanRoutes } from "./routes/floor-plan.js";
@@ -9,6 +11,7 @@ import { guestBookingRoutes, type AvailabilityRateLimit } from "./routes/guest-b
 import { healthRoutes } from "./routes/health.js";
 import { planEditorRoutes } from "./routes/plan-editor.js";
 import { reservationRoutes, type BookingRateLimit } from "./routes/reservations.js";
+import { serviceRoutes } from "./routes/service.js";
 import { webRoutes } from "./routes/web.js";
 import { BusyError } from "./transaction.js";
 
@@ -38,6 +41,28 @@ export interface AppOptions {
   now?: () => Date;
   /** A folder with the built staff web app, served at /. Without it, only the API answers. */
   webDir?: string | undefined;
+  /** Sends the e-mails. Without it they are only written to the log. */
+  mailer?: Mailer | undefined;
+  /**
+   * "auto" sends queued e-mails right after each change and checks for retries every
+   * `emailIntervalMs`. "manual" leaves them in the queue, for tests that send them themselves.
+   */
+  emailDelivery?: "auto" | "manual";
+  emailIntervalMs?: number;
+}
+
+/** Keeps the values of a database row out of the log: PostgreSQL puts them in `detail`. */
+function withoutRowValues(error: unknown): unknown {
+  if (!(error instanceof Error) || !("detail" in error)) return error;
+  const copy = new Error(error.message);
+  copy.name = error.name;
+  if (error.stack !== undefined) copy.stack = error.stack;
+  const { code, constraint, table } = error as {
+    code?: unknown;
+    constraint?: unknown;
+    table?: unknown;
+  };
+  return Object.assign(copy, { code, constraint, table });
 }
 
 export async function buildApp({
@@ -50,6 +75,9 @@ export async function buildApp({
   maxConcurrentLogins,
   now = () => new Date(),
   webDir,
+  mailer,
+  emailDelivery = "auto",
+  emailIntervalMs = 30_000,
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger, trustProxy });
 
@@ -64,7 +92,7 @@ export async function buildApp({
     }
     const statusCode = error.statusCode ?? 500;
     if (statusCode >= 500) {
-      request.log.error(error, "Request failed");
+      request.log.error(withoutRowValues(error), "Request failed");
       return reply.code(500).send({ error: "Internal error" });
     }
     return reply.code(statusCode).send({ error: error.message });
@@ -92,6 +120,24 @@ export async function buildApp({
       }),
   });
 
+  const emails =
+    emailDelivery === "auto"
+      ? startEmailWorker({
+          pool,
+          mailer: mailer ?? logMailer(app.log),
+          now,
+          log: app.log,
+          intervalMs: emailIntervalMs,
+        })
+      : null;
+  // Waits for e-mails being sent, so closing never cuts one off halfway.
+  app.addHook("onClose", async () => {
+    await emails?.stop();
+  });
+  const onEmailsQueued = () => {
+    emails?.kick();
+  };
+
   await app.register(healthRoutes, { pool });
   await app.register(floorPlanRoutes, { pool });
   await app.register(authRoutes, {
@@ -102,7 +148,13 @@ export async function buildApp({
   });
   await app.register(planEditorRoutes, { pool, now });
   await app.register(bookingRulesRoutes, { pool, now });
-  await app.register(reservationRoutes, { pool, now, rateLimit: bookingRateLimit });
+  await app.register(reservationRoutes, {
+    pool,
+    now,
+    rateLimit: bookingRateLimit,
+    onEmailsQueued,
+  });
+  await app.register(serviceRoutes, { pool, now, onEmailsQueued });
   await app.register(guestBookingRoutes, { pool, now, rateLimit: availabilityRateLimit });
 
   app.get("/openapi.json", { schema: { hide: true } }, () => app.swagger());

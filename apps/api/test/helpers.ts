@@ -36,6 +36,8 @@ export const TEST_APP_OPTIONS = {
   bookingRateLimit: { max: 100_000, windowMs: 60_000 },
   availabilityRateLimit: { max: 100_000, windowMs: 60_000 },
   loginRateLimit: { max: 100_000, windowMs: 60_000 },
+  // E-mails wait in the queue; the tests about them send them on purpose.
+  emailDelivery: "manual",
 } satisfies Partial<AppOptions>;
 
 let guests = 0;

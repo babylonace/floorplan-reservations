@@ -10,6 +10,7 @@ import {
 import type { FastifyPluginAsync } from "fastify";
 import type { PoolClient } from "pg";
 import type { Pool } from "../db.js";
+import { queueNewBookingEmails } from "../email/outbox.js";
 import { loadOpeningHours } from "./booking-rules.js";
 
 const SLUG_PATTERN = "^[a-z0-9]+(-[a-z0-9]+)*$";
@@ -145,6 +146,8 @@ export interface ReservationRouteOptions {
   pool: Pool;
   now: () => Date;
   rateLimit: BookingRateLimit;
+  /** Called after a booking queued its e-mails, so they go out without waiting for the timer. */
+  onEmailsQueued: () => void;
 }
 
 function phoneDigits(phone: string): string {
@@ -367,6 +370,8 @@ async function bookBestTables(
         continue;
       }
       await client.query("release savepoint attempt");
+      // In the same transaction: the messages exist exactly when the booking does.
+      await queueNewBookingEmails(client, created.id);
 
       const zone = plan.find((candidate) => candidate.id === best.zoneId);
       return {
@@ -396,7 +401,7 @@ function isRealDay(isoDateTime: string): boolean {
 
 export const reservationRoutes: FastifyPluginAsync<ReservationRouteOptions> = (
   app,
-  { pool, now, rateLimit },
+  { pool, now, rateLimit, onEmailsQueued },
 ) => {
   app.post<{ Params: { slug: string }; Body: CreateBody }>(
     "/venues/:slug/reservations",
@@ -546,6 +551,7 @@ export const reservationRoutes: FastifyPluginAsync<ReservationRouteOptions> = (
           .send(refusal("No table is free for that party at that time", "no_table"));
       }
 
+      onEmailsQueued();
       return reply.code(201).send({
         id: booking.id,
         status: booking.status,
