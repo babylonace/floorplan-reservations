@@ -10,6 +10,7 @@ import {
 import type { FastifyPluginAsync } from "fastify";
 import type { PoolClient } from "pg";
 import type { Pool } from "../db.js";
+import { queueNewBookingEmails } from "../email/outbox.js";
 import { loadOpeningHours } from "./booking-rules.js";
 
 const SLUG_PATTERN = "^[a-z0-9]+(-[a-z0-9]+)*$";
@@ -145,6 +146,8 @@ export interface ReservationRouteOptions {
   pool: Pool;
   now: () => Date;
   rateLimit: BookingRateLimit;
+  /** Called after a booking queued its e-mails, so they go out without waiting for the timer. */
+  onEmailsQueued: () => void;
 }
 
 function phoneDigits(phone: string): string {
@@ -396,7 +399,7 @@ function isRealDay(isoDateTime: string): boolean {
 
 export const reservationRoutes: FastifyPluginAsync<ReservationRouteOptions> = (
   app,
-  { pool, now, rateLimit },
+  { pool, now, rateLimit, onEmailsQueued },
 ) => {
   app.post<{ Params: { slug: string }; Body: CreateBody }>(
     "/venues/:slug/reservations",
@@ -515,6 +518,18 @@ export const reservationRoutes: FastifyPluginAsync<ReservationRouteOptions> = (
         booking = (await guestAlreadyBooked(client, venue.id, body, startsAt, endsAt))
           ? "duplicate"
           : await bookBestTables(client, venue.id, body, locale, startsAt, endsAt);
+        if (booking !== null && booking !== "duplicate") {
+          // In the same transaction, so the messages exist exactly when the booking does. A
+          // problem here loses the messages, never the booking.
+          await client.query("savepoint emails");
+          try {
+            await queueNewBookingEmails(client, booking.id);
+            await client.query("release savepoint emails");
+          } catch (error) {
+            await client.query("rollback to savepoint emails");
+            request.log.error({ code: errorCode(error) }, "Could not queue the booking e-mails");
+          }
+        }
         await client.query(booking !== null && booking !== "duplicate" ? "commit" : "rollback");
         client.release();
       } catch (error) {
@@ -546,6 +561,7 @@ export const reservationRoutes: FastifyPluginAsync<ReservationRouteOptions> = (
           .send(refusal("No table is free for that party at that time", "no_table"));
       }
 
+      onEmailsQueued();
       return reply.code(201).send({
         id: booking.id,
         status: booking.status,

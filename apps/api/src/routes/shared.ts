@@ -25,6 +25,7 @@ export const ERROR_CODES = [
   "reservations_without_room",
   "changed_while_saving",
   "plan_invalid",
+  "status_not_allowed",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 

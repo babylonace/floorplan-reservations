@@ -4,7 +4,7 @@ Table reservations for restaurants, where the venue draws its own floor plan and
 
 [Leer en español](README.es.md)
 
-> **Status: early.** The API can take a booking, the database refuses double bookings, and owners draw their floor plan in a browser editor. Public bookings respect opening hours, a booking horizon and per-address limits. Staff sign in with a password, and only a venue's owners can change the plan. Guests book on a public page in Spanish, English or Arabic. There is no staff screen for the day's bookings yet. See the [roadmap](#roadmap).
+> **Status: early.** The API can take a booking, the database refuses double bookings, and owners draw their floor plan in a browser editor. Public bookings respect opening hours, a booking horizon and per-address limits. Staff sign in with a password, and only a venue's owners can change the plan. Guests book on a public page in Spanish, English or Arabic, and staff run the day's service from their own screen, with e-mail notices in the guest's language. See the [roadmap](#roadmap).
 
 ![The floor plan editor: a dining room drawn to scale on a green cutting mat, with table 3 selected; the plan fills the right of the window and a column on the left holds the venue and the account, the add buttons, the details of table 3 and, at the bottom, Save, Discard and Delete zone; the language and signing out are in the top right corner](docs/images/editor.png)
 
@@ -36,10 +36,11 @@ Out of scope: orders, kitchen screens, point of sale.
   - `GET` and `PUT /venues/:slug/booking-rules` read and replace how far ahead guests may book and the opening hours.
   - `GET /venues/:slug/booking-options` and `GET /venues/:slug/availability?date=&partySize=` feed the [booking page](#the-booking-page): the venue's name and languages, the zones guests may ask for, and which times of a day still have a table.
   - Floor plan editing: `POST /venues/:slug/zones`, `PATCH` and `DELETE /venues/:slug/zones/:zoneId`, `POST /venues/:slug/zones/:zoneId/tables`, `PATCH` and `DELETE /venues/:slug/tables/:tableId`. See [editing the plan](#editing-the-plan).
+  - The [day's service](#the-days-service) for staff: `GET /venues/:slug/reservations?date=` lists a day's bookings with the guests' details, and `PATCH /venues/:slug/reservations/:id` confirms, seats, cancels or marks a no-show.
   - Staff sign-in: `POST /auth/login`, `POST /auth/logout` and `GET /auth/me`. See [staff accounts and sign-in](#staff-accounts-and-sign-in).
   - `GET /health` checks that the API can reach the database.
   - `GET /openapi.json` describes the API (OpenAPI 3.1).
-- `apps/web`: the [floor plan editor](#the-floor-plan-editor) for staff and the [booking page](#the-booking-page) for guests, in React and TypeScript, built with Vite as two pages. The API serves the editor at `/` and the booking page at `/reservar/<venue>`.
+- `apps/web`: the [floor plan editor](#the-floor-plan-editor) and the [day's service](#the-days-service) for staff, and the [booking page](#the-booking-page) for guests, in React and TypeScript, built with Vite as two pages. The API serves the editor at `/` and the booking page at `/reservar/<venue>`.
 - `npm run staff`: the command line that creates the first owner and manages staff accounts.
 - `db/migrations`: the schema, as plain SQL files. A small runner applies them in order, each in a transaction, behind a lock so two copies of the app can't migrate at the same time.
 - `db/seed/sample.sql`: a made-up venue to play with.
@@ -108,7 +109,7 @@ CI runs the same checks on every pull request against PostgreSQL 18. The browser
 
 Guests book without an account. Staff sign in with their e-mail address and a password, and changing a venue needs an account with the right role **at that venue**.
 
-- **Roles.** `owner` may change the floor plan and the booking rules. `staff` is for the coming staff screen (today's bookings) and may not change either. One account can run several venues, with a different role at each.
+- **Roles.** `owner` may change the floor plan and the booking rules. `staff` runs the [day's service](#the-days-service) (so do owners) and may not change either. One account can run several venues, with a different role at each.
 - **Who may do what.** Every plan editing route and `PUT /venues/:slug/booking-rules` answer `401` without a session and `403` when the account is not an owner of that venue. Reading the plan, reading the rules and booking stay open to everyone. A role taken away stops working on the very next request.
 - **First account.** There is no default user and no password in the code. Create the first owner from the command line; it asks for the password twice without showing it:
 
@@ -123,7 +124,7 @@ Guests book without an account. Staff sign in with their e-mail address and a pa
 - **Sessions** live in PostgreSQL, which only keeps a SHA-256 of each token. A session ends after 12 hours without use and 30 days after sign-in at the latest. Signing in again in the same browser replaces the old session, and a new password ends every session of the account.
 - **The cookie** is `__Host-floorplan_session`: `HttpOnly` (page scripts can't read it), `Secure` (HTTPS only; browsers also accept it on `http://localhost`) and `SameSite=Strict` (other sites can't send it). Requests that a browser marks as started by another site (`Sec-Fetch-Site: cross-site` or `same-site`) are refused with `403` on every route that needs a session, and on sign-in. That includes another subdomain of the same site: a staff screen must be served from the same origin as the API (or through a reverse proxy that makes it so).
 - **Failed sign-ins.** A wrong password and an unknown address get the same answer, and take about as long. After 10 failed attempts for one address in 15 minutes, that address gets `429` until the 15 minutes are over, even with the right password. The count is kept in PostgreSQL per address, whether or not it has an account, so it works across several copies of the API and gives nothing away. Each network address can also send 30 sign-in requests every 15 minutes (`LOGIN_RATE_LIMIT_MAX` and `LOGIN_RATE_LIMIT_WINDOW_MINUTES`). Someone who knows a staff member's address can keep that address locked out by failing on purpose; lift the lock with `npm run staff -- unlock --email <address>`. `TRUST_PROXY` matters here too. A successful sign-in clears the count. At most 16 password checks run at the same time across the whole API (each needs 32 MiB); more get `503` with `Retry-After`.
-- **Not yet:** signing in with a link by e-mail (it comes when the API can send e-mails), two-factor codes, and managing staff from a screen.
+- **Not yet:** signing in with a link by e-mail, two-factor codes, and managing staff from a screen.
 
 ## Editing the plan
 
@@ -196,7 +197,7 @@ Booking needs no account, so the endpoint protects itself:
 
 - **Opening hours.** Each venue stores arrival windows: the first and the last time a guest may arrive, in the venue's own time zone, so 20:00 stays 20:00 when the clocks change. Windows repeat every week; a window can run past midnight (20:00 to 00:30). **Special days** (a holiday, a week off, a New Year's Eve dinner) replace the weekly hours of that date; a special day with no windows is closed. Bookings outside the hours get `422`. Arrival times count to the minute: 15:30:45 counts as 15:30. A venue that hasn't set any hours takes no online bookings.
 - **Horizon.** Guests can book from today up to `horizonDays` ahead (60 by default, at most 730), counted in the venue's calendar days. Further ahead gets `422`.
-- **One booking per guest at a time.** A second booking at the same venue with the same e-mail (any letter case) or the same phone (any spacing) that overlaps one the guest already holds gets `409`. That catches a double click on "Book" and one person taking several tables for the same evening. Simultaneous clicks queue up per guest, so exactly one gets through. Only the same e-mail or the same phone digits match: a guest who books once with an e-mail and once with only a phone, or writes the country code once and not the other time, is not caught. Contact details aren't verified yet, so someone who knows a guest's e-mail can book with it first; e-mail confirmation comes with the staff screen and its notices.
+- **One booking per guest at a time.** A second booking at the same venue with the same e-mail (any letter case) or the same phone (any spacing) that overlaps one the guest already holds gets `409`. That catches a double click on "Book" and one person taking several tables for the same evening. Simultaneous clicks queue up per guest, so exactly one gets through. Only the same e-mail or the same phone digits match: a guest who books once with an e-mail and once with only a phone, or writes the country code once and not the other time, is not caught. Contact details aren't verified, so someone who knows a guest's e-mail can book with it first; that address does get the "we have your booking" e-mail, so its owner finds out.
 - **Availability.** `GET /venues/:slug/availability` allows 120 requests per address every 15 minutes, enough for a guest trying many days. A free time is a hint, not a promise: someone may book it first, and the booking itself still decides.
 - **Requests per address.** Each address can send 10 booking requests every 15 minutes (set with `BOOKING_RATE_LIMIT_MAX` and `BOOKING_RATE_LIMIT_WINDOW_MINUTES`); after that it gets `429` with `Retry-After`. Failed requests count too. An IPv6 `/64` counts as one address. The counts live in the API's memory, so each copy of the API counts on its own and a restart resets them. Guests behind one shared address (a mobile carrier, the venue's own Wi-Fi) share one limit. There is no cap per venue yet.
 - **Behind a proxy**, set `TRUST_PROXY` to the proxy's address (for example `127.0.0.1`). Otherwise every guest looks like the proxy and they all share one limit. `X-Forwarded-For` is only believed from the addresses listed there. With Docker Compose, the API sees the proxy through Docker's network (an address such as `172.17.0.1`), not as `127.0.0.1`: list that address or range instead.
@@ -217,12 +218,31 @@ Guests book at `/reservar/<venue>`, with no account:
 
 ![The same page on a phone, in Arabic: everything reads from the right, with the venue's name on the right, the calendar's Monday column on the right and the chosen 13:00 at the right of the first row of times.](docs/images/booking-phone-ar.png)
 
+## The day's service
+
+![The day's service of the made-up Sample Bistro: on the left, a day picker and the day's bookings, each with its time, name, party size, zone and table, contact, note, status and buttons; on the right, the dining room with the tables taken at the chosen time in dark.](docs/images/service.png)
+
+Signed-in staff open the **Service** tab next to **Plan** (staff without the owner role start there):
+
+- **One day at a time**, with arrows, a date field and "Today". Bookings come in arrival order with the time, the party, the name, the e-mail and phone (tap to write or call), the zone and tables, the guest's note and the status. The list looks for new bookings every minute.
+- **Buttons for what can happen next:** a pending booking can be confirmed; pending and confirmed ones can be seated, marked as a no-show or cancelled. Cancelling and no-show ask first, because they can't be undone, and both free the table at once (the [double-booking rule](#how-double-bookings-are-stopped) already ignores them). Two people tapping at once can't break anything: the change only applies if the booking is still in a status it can come from, and the second one is told the list changed.
+- **The plan at a time.** The zone on screen shows its taken tables in dark at the time picked above it (now, or the start of any booking). Tapping a booking shows the plan at its time with its tables outlined.
+- **Only staff see guest details.** Both routes need a session with a role at that venue; the answers carry `Cache-Control: no-store`.
+
+### E-mails
+
+- **To the guest** when the booking arrives ("we have your booking"), when staff confirm it and when they cancel it, in the language the guest picked on the booking page (Spanish, English or Arabic; other languages get English). Guests who only left a phone get none.
+- **To the venue's owners** when a new booking arrives, in the venue's language, with the guest's details.
+- **A queue in PostgreSQL.** The messages are written in the same transaction as the booking or the change, so none is lost, and a mail server that is down never undoes a booking. A worker inside the API sends them right away and checks for retries every 30 seconds; a failed message is tried again after 1, 5, 15, 60 and 180 minutes, then left in `email_outbox` with the reason. Sent messages are deleted. Several copies of the API can run: each message is claimed by one of them.
+- **SMTP settings** come from the environment: `SMTP_HOST`, `SMTP_PORT` (587 by default), `SMTP_SECURE` (`true` for a connection encrypted from the start; the default is `true` only on port 465), `SMTP_USER`, `SMTP_PASSWORD` and `MAIL_FROM` (required with `SMTP_HOST`). See `.env.example`. **Without `SMTP_HOST`** (a laptop, CI), nothing is sent: each message is written to the log instead, with the address masked (`g***@example.com`) and without its text.
+- **Nothing personal in the log.** E-mail addresses are masked in the log and in the stored error text, and database errors are logged without the row values PostgreSQL adds to them.
+
 ## Roadmap
 
 1. ~~**Booking engine with no double bookings.**~~ Done.
 2. ~~**Floor plan editor.** API to edit zones and tables, checked by the engine, and the screen to draw them.~~ Done.
 3. ~~**Public booking page.** Several languages (including right-to-left), suggests nearby times when the one asked for is full, GDPR-friendly.~~ Done.
-4. **Staff screen.** Today's service, confirm, cancel, seat, email notices.
+4. ~~**Staff screen.** Today's service, confirm, cancel, seat, email notices.~~ Done.
 5. **Deployment guide.** Backups and running it for a real venue.
 
 ## Stack

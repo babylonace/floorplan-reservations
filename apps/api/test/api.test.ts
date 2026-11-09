@@ -146,6 +146,7 @@ describe("GET /openapi.json", () => {
       "/venues/{slug}/booking-rules",
       "/venues/{slug}/floor-plan",
       "/venues/{slug}/reservations",
+      "/venues/{slug}/reservations/{id}",
       "/venues/{slug}/tables/{tableId}",
       "/venues/{slug}/zones",
       "/venues/{slug}/zones/{zoneId}",
@@ -160,7 +161,7 @@ describe("GET /openapi.json", () => {
         .filter(([method]) => !(path.endsWith("/reservations") && method === "post"))
         .map(([method, operation]) => ({ path, method, security: operation.security })),
     );
-    expect(changes).toHaveLength(7);
+    expect(changes).toHaveLength(8);
     for (const change of changes) {
       expect(change).toEqual({ ...change, security: [{ staffSession: [] }] });
     }

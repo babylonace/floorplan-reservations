@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import type { SmtpSettings } from "./email/mailer.js";
 
 export interface Config {
   databaseUrl: string;
@@ -11,6 +12,8 @@ export interface Config {
   loginRateLimit: { max: number; windowMs: number };
   /** The built staff web app to serve at /, when WEB_DIR is set. */
   webDir: string | undefined;
+  /** The mail server for e-mails to guests and venues. Without it they are only logged. */
+  smtp: SmtpSettings | undefined;
 }
 
 const ROOT_ENV_FILE = fileURLToPath(new URL("../../../.env", import.meta.url));
@@ -51,6 +54,37 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       windowMs: positiveWhole(env, "LOGIN_RATE_LIMIT_WINDOW_MINUTES", 15) * 60_000,
     },
     webDir: env.WEB_DIR?.trim() ? env.WEB_DIR.trim() : undefined,
+    smtp: parseSmtp(env),
+  };
+}
+
+/**
+ * SMTP_HOST turns e-mail on. MAIL_FROM is then required; SMTP_PORT defaults to 587 and
+ * SMTP_SECURE to true only on port 465. SMTP_USER and SMTP_PASSWORD are for servers that ask.
+ */
+export function parseSmtp(env: NodeJS.ProcessEnv): SmtpSettings | undefined {
+  const host = env.SMTP_HOST?.trim();
+  if (!host) return undefined;
+  const from = env.MAIL_FROM?.trim();
+  if (!from) throw new Error("MAIL_FROM must be set when SMTP_HOST is set");
+  const port = Number(env.SMTP_PORT ?? "587");
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(
+      `SMTP_PORT must be a whole number between 1 and 65535, got "${env.SMTP_PORT ?? ""}"`,
+    );
+  }
+  const secure =
+    env.SMTP_SECURE === undefined || env.SMTP_SECURE === ""
+      ? port === 465
+      : ["true", "1", "yes"].includes(env.SMTP_SECURE.trim().toLowerCase());
+  const user = env.SMTP_USER?.trim() ? env.SMTP_USER.trim() : undefined;
+  return {
+    host,
+    port,
+    secure,
+    user,
+    password: user === undefined ? undefined : env.SMTP_PASSWORD,
+    from,
   };
 }
 

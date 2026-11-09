@@ -7,6 +7,9 @@ import type {
   BookingRequest,
   BookingRules,
   FloorPlan,
+  ServiceDay,
+  ServiceReservation,
+  StaffAction,
   Table,
   TableFields,
   Zone,
@@ -109,6 +112,16 @@ export const api = {
     ),
   book: (slug: string, booking: BookingRequest) =>
     request<Booking>("POST", `${venue(slug)}/reservations`, booking),
+
+  serviceDay: (slug: string, date: string) =>
+    request<ServiceDay>(
+      "GET",
+      `${venue(slug)}/reservations?${new URLSearchParams({ date }).toString()}`,
+    ),
+  setReservationStatus: (slug: string, id: string, status: StaffAction) =>
+    request<ServiceReservation>("PATCH", `${venue(slug)}/reservations/${encodeURIComponent(id)}`, {
+      status,
+    }),
 };
 
 export type Api = typeof api;

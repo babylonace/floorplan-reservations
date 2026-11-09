@@ -74,6 +74,8 @@ export function fakeApi(overrides: Partial<Api> = {}): Api {
     bookingRules: notSet("bookingRules"),
     availability: notSet("availability"),
     book: notSet("book"),
+    serviceDay: notSet("serviceDay"),
+    setReservationStatus: notSet("setReservationStatus"),
     ...overrides,
   };
 }
