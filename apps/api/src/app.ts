@@ -130,8 +130,9 @@ export async function buildApp({
           intervalMs: emailIntervalMs,
         })
       : null;
-  // Waits for e-mails being sent, so closing never cuts one off halfway.
-  app.addHook("onClose", async () => {
+  // Before any onClose hook (which may end the pool): stops sending between two messages and
+  // waits for the one being sent, so closing never leaves a sent message in the queue.
+  app.addHook("preClose", async () => {
     await emails?.stop();
   });
   const onEmailsQueued = () => {

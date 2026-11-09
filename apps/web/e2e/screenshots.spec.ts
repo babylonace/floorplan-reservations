@@ -128,3 +128,40 @@ test.describe("booking on a phone", () => {
     await page.screenshot({ path: `${folder}booking-phone-ar.png` });
   });
 });
+
+test("the day's service with a booking picked on the plan", async ({ page, request }) => {
+  await page.goto("/reservar/sample-bistro");
+  await page.getByRole("button", { name: "Mes siguiente" }).click();
+  const date =
+    (await page.locator(".calendar-day:not([aria-disabled])").first().getAttribute("data-date")) ??
+    "";
+  const times = await request.get(`/venues/sample-bistro/availability?date=${date}&partySize=2`);
+  const slots = ((await times.json()) as { slots: { startsAt: string }[] }).slots;
+  // Made-up guests at the first times of that day.
+  const guests = [
+    { guestName: "Lucía Martín", partySize: 2, guestEmail: "lucia@example.com", slot: 0 },
+    { guestName: "Omar Haddad", partySize: 4, guestPhone: "+34 600 000 002", slot: 2 },
+    { guestName: "Emma Brown", partySize: 3, guestEmail: "emma@example.com", slot: 4 },
+  ];
+  for (const { slot, ...guest } of guests) {
+    await request.post("/venues/sample-bistro/reservations", {
+      data: {
+        ...guest,
+        startsAt: slots[slot]?.startsAt,
+        ...(guest.guestName === "Omar Haddad" ? { notes: "Birthday, a high chair please" } : {}),
+      },
+    });
+  }
+  await signIn(page);
+  await page.getByRole("button", { name: "Servicio" }).click();
+  await page.getByLabel("Día", { exact: true }).fill(date);
+  const list = page.getByRole("list", { name: "Reservas del día" });
+  await list
+    .getByRole("listitem")
+    .filter({ hasText: "Lucía Martín" })
+    .getByRole("button", { name: "Confirmar" })
+    .click();
+  await list.getByRole("button", { name: /Omar Haddad/ }).click();
+  await page.mouse.move(0, 0);
+  await page.screenshot({ path: `${folder}service.png` });
+});

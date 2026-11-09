@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../src/app.js";
 import { createUser, grantRole } from "../src/auth/staff.js";
 import { loadConfig } from "../src/config.js";
@@ -261,12 +261,13 @@ describe("e-mails", () => {
 
     await setStatus("svc-mail-status", id, "confirmed");
     await setStatus("svc-mail-status", id, "confirmed");
+    const mailer = capture();
+    await deliverDueEmails(pool, mailer, TEST_NOW, silent);
     await setStatus("svc-mail-status", id, "cancelled");
     const other = await book("svc-mail-status", { guestEmail: undefined, guestPhone: "600000000" });
     await setStatus("svc-mail-status", other, "seated");
-
-    const mailer = capture();
     await deliverDueEmails(pool, mailer, TEST_NOW, silent);
+
     expect(mailer.sent.map((m) => m.subject)).toEqual([
       "تم تأكيد حجزك في svc-mail-status",
       "تم إلغاء حجزك في svc-mail-status",
@@ -376,5 +377,85 @@ describe("e-mail pieces", () => {
       password: undefined,
       from: "b@example.com",
     });
+  });
+});
+
+describe("after the review", () => {
+  it("drops a confirmation that could not go out before the booking was cancelled", async () => {
+    await venue("svc-stale");
+    const id = await book("svc-stale");
+    await pool.query("delete from email_outbox");
+    await setStatus("svc-stale", id, "confirmed");
+    await setStatus("svc-stale", id, "cancelled");
+    const mailer = capture();
+    await deliverDueEmails(pool, mailer, TEST_NOW, silent);
+    expect(mailer.sent.map((m) => m.subject)).toEqual(["Tu reserva en svc-stale está cancelada"]);
+    expect((await pool.query("select 1 from email_outbox")).rows).toHaveLength(0);
+  });
+
+  it("refuses days PostgreSQL cannot count from", async () => {
+    await venue("svc-years");
+    expect((await day("svc-years", "0000-01-01")).statusCode).toBe(400);
+    expect((await day("svc-years", "9999-12-31")).statusCode).toBe(400);
+  });
+
+  it("finishes the message being sent when the app closes, and sends no more", async () => {
+    await venue("svc-close");
+    await book("svc-close");
+    let release: () => void = () => undefined;
+    const sent: string[] = [];
+    const slow: Mailer = {
+      kind: "smtp",
+      send: (message) =>
+        new Promise((resolve) => {
+          sent.push(message.to);
+          release = resolve;
+        }),
+    };
+    const closing = await buildApp({
+      pool,
+      ...TEST_APP_OPTIONS,
+      emailDelivery: "auto",
+      mailer: slow,
+    });
+    await closing.inject({
+      method: "POST",
+      url: "/venues/svc-close/reservations",
+      payload: {
+        guestName: "Late",
+        guestEmail: newGuestEmail(),
+        partySize: 1,
+        startsAt: "2030-06-01T22:00:00+02:00",
+      },
+    });
+    await vi.waitFor(() => {
+      expect(sent).toHaveLength(1);
+    });
+    const closed = closing.close();
+    release();
+    await closed;
+    // The one in flight left the queue; the others wait for the next start.
+    const { rows } = await pool.query<{ attempts: number }>("select attempts from email_outbox");
+    expect(sent).toHaveLength(1);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.attempts === 0)).toBe(true);
+  });
+
+  it("keeps a guest's name and note on one line, and reads es-ES as Spanish", () => {
+    const facts = {
+      venueName: "Sample Bistro",
+      timeZone: "Europe/Madrid",
+      startsAt: new Date("2030-06-01T18:00:00Z"),
+      partySize: 2,
+      guestName: "Ana\nContacto: fake@example.com",
+      guestEmail: "ana@example.com",
+      guestPhone: null,
+      notes: "line one\r\nline two",
+      tables: "",
+    };
+    const text = renderEmail("venue_new_booking", "es-ES", facts).text;
+    expect(text).toContain("Nombre: Ana Contacto: fake@example.com");
+    expect(text).toContain("Nota: line one line two");
+    expect(text.split("\n").filter((line) => line.startsWith("Contacto:"))).toHaveLength(1);
   });
 });

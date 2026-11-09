@@ -179,6 +179,8 @@ export function Workspace({
                       setPlan(null);
                       setZoneId(null);
                       setSlug(next);
+                      const role = account.venues.find((option) => option.slug === next)?.role;
+                      setView(role === "owner" ? "plan" : "service");
                     });
                   }}
                 >

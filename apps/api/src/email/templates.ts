@@ -107,9 +107,18 @@ const WORDS: Record<string, Words> = {
 /** The language used when a message's language has no words here. */
 export const FALLBACK_LOCALE = "en";
 
-function wordsFor(locale: string): { words: Words; locale: string } {
-  const words = WORDS[locale];
-  return words ? { words, locale } : { words: WORDS.en as Words, locale: FALLBACK_LOCALE };
+function wordsFor(requested: string): { words: Words; locale: string } {
+  // "es-ES" reads as Spanish.
+  for (const locale of [requested, requested.split("-")[0] ?? ""]) {
+    const words = WORDS[locale];
+    if (words) return { words, locale };
+  }
+  return { words: WORDS.en as Words, locale: FALLBACK_LOCALE };
+}
+
+/** On one line, so a name or note cannot add lines that look like the message's own. */
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
 }
 
 /** Date and time in the venue's time zone, in the reader's language, with Western digits. */
@@ -127,6 +136,7 @@ export function formatWhen(locale: string, timeZone: string, at: Date): string {
 
 export function renderEmail(kind: EmailKind, requested: string, facts: EmailFacts): EmailContent {
   const { words, locale } = wordsFor(requested);
+  const guestName = oneLine(facts.guestName);
   const when = formatWhen(locale, facts.timeZone, facts.startsAt);
   const people = words.people(facts.partySize);
 
@@ -136,10 +146,10 @@ export function renderEmail(kind: EmailKind, requested: string, facts: EmailFact
       words.venueLead,
       "",
       `${when} · ${people}`,
-      `${words.labels.name}: ${facts.guestName}`,
+      `${words.labels.name}: ${guestName}`,
       `${words.labels.contact}: ${contact}`,
       ...(facts.tables ? [`${words.labels.tables}: ${facts.tables}`] : []),
-      ...(facts.notes ? [`${words.labels.notes}: ${facts.notes}`] : []),
+      ...(facts.notes ? [`${words.labels.notes}: ${oneLine(facts.notes)}`] : []),
       "",
       facts.venueName,
     ];
@@ -153,7 +163,7 @@ export function renderEmail(kind: EmailKind, requested: string, facts: EmailFact
         ? words.confirmed
         : words.cancelled;
   const lines = [
-    words.hello(facts.guestName),
+    words.hello(guestName),
     "",
     message.lead,
     "",

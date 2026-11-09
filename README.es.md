@@ -4,7 +4,7 @@ Reservas de mesa para restaurantes: el local dibuja su propio plano y el motor d
 
 [Read in English](README.md)
 
-> **Estado: en sus inicios.** La API acepta reservas, la base de datos rechaza las reservas dobles y los propietarios dibujan su plano en un editor en el navegador. Las reservas públicas respetan el horario, la antelación máxima y los límites por dirección. El personal entra con contraseña y solo los propietarios de un local pueden cambiar su plano. Los clientes reservan en una página pública en español, inglés o árabe. Todavía no hay pantalla del personal con las reservas del día. Mira la [hoja de ruta](#hoja-de-ruta).
+> **Estado: en sus inicios.** La API acepta reservas, la base de datos rechaza las reservas dobles y los propietarios dibujan su plano en un editor en el navegador. Las reservas públicas respetan el horario, la antelación máxima y los límites por dirección. El personal entra con contraseña y solo los propietarios de un local pueden cambiar su plano. Los clientes reservan en una página pública en español, inglés o árabe, y el personal lleva el servicio del día desde su propia pantalla, con avisos por email en el idioma del cliente. Mira la [hoja de ruta](#hoja-de-ruta).
 
 ![El editor del plano: un comedor dibujado a escala sobre un tapete de corte verde, con la mesa 3 elegida; el plano ocupa la derecha de la ventana y una columna a la izquierda tiene el local y la cuenta, los botones de añadir, los datos de la mesa 3 y, abajo, Guardar, Descartar y Borrar zona; el idioma y cerrar sesión están arriba a la derecha](docs/images/editor.png)
 
@@ -36,10 +36,11 @@ Fuera de alcance: comandas, pantallas de cocina, TPV.
   - `GET` y `PUT /venues/:slug/booking-rules` leen y sustituyen con cuánta antelación se puede reservar y el horario de apertura.
   - `GET /venues/:slug/booking-options` y `GET /venues/:slug/availability?date=&partySize=` alimentan la [página de reserva](#la-página-de-reserva): el nombre y los idiomas del local, las zonas que el cliente puede pedir y qué horas de un día tienen mesa libre.
   - Edición del plano: `POST /venues/:slug/zones`, `PATCH` y `DELETE /venues/:slug/zones/:zoneId`, `POST /venues/:slug/zones/:zoneId/tables`, `PATCH` y `DELETE /venues/:slug/tables/:tableId`. Mira [editar el plano](#editar-el-plano).
+  - El [servicio del día](#el-servicio-del-día) para el personal: `GET /venues/:slug/reservations?date=` lista las reservas de un día con los datos de los clientes, y `PATCH /venues/:slug/reservations/:id` confirma, sienta, cancela o marca que no vino.
   - Inicio de sesión del personal: `POST /auth/login`, `POST /auth/logout` y `GET /auth/me`. Mira [cuentas del personal e inicio de sesión](#cuentas-del-personal-e-inicio-de-sesión).
   - `GET /health` comprueba que la API llega a la base de datos.
   - `GET /openapi.json` describe la API (OpenAPI 3.1).
-- `apps/web`: el [editor del plano](#el-editor-del-plano) para el personal y la [página de reserva](#la-página-de-reserva) para los clientes, en React y TypeScript, construidos con Vite como dos páginas. La API sirve el editor en `/` y la página de reserva en `/reservar/<local>`.
+- `apps/web`: el [editor del plano](#el-editor-del-plano) y el [servicio del día](#el-servicio-del-día) para el personal, y la [página de reserva](#la-página-de-reserva) para los clientes, en React y TypeScript, construidos con Vite como dos páginas. La API sirve el editor en `/` y la página de reserva en `/reservar/<local>`.
 - `npm run staff`: la línea de comandos que crea el primer propietario y gestiona las cuentas del personal.
 - `db/migrations`: el esquema, en archivos SQL normales. Un pequeño programa los aplica en orden, cada uno en su transacción y con un bloqueo para que dos copias de la app no migren a la vez.
 - `db/seed/sample.sql`: un local inventado para probar.
@@ -107,7 +108,7 @@ La CI pasa las mismas comprobaciones en cada pull request contra PostgreSQL 18. 
 
 Los clientes reservan sin cuenta. El personal entra con su email y una contraseña, y para cambiar un local hace falta una cuenta con el rol adecuado **en ese local**.
 
-- **Roles.** `owner` (propietario) puede cambiar el plano y las reglas de reserva. `staff` (personal) es para el futuro panel del local (las reservas del día) y no puede cambiar ninguna de las dos cosas. Una cuenta puede llevar varios locales, con un rol distinto en cada uno.
+- **Roles.** `owner` (propietario) puede cambiar el plano y las reglas de reserva. `staff` (personal) lleva el [servicio del día](#el-servicio-del-día) (los propietarios también) y no puede cambiar ninguna de las dos cosas. Una cuenta puede llevar varios locales, con un rol distinto en cada uno.
 - **Quién puede hacer qué.** Todas las rutas para editar el plano y `PUT /venues/:slug/booking-rules` responden `401` sin sesión y `403` si la cuenta no es propietaria de ese local. Ver el plano, ver las reglas y reservar siguen abiertos a todo el mundo. Un rol que se quita deja de valer en la siguiente petición.
 - **Primera cuenta.** No hay usuario por defecto ni ninguna contraseña en el código. El primer propietario se crea desde la línea de comandos, que pide la contraseña dos veces sin mostrarla:
 
@@ -122,7 +123,7 @@ Los clientes reservan sin cuenta. El personal entra con su email y una contrase�
 - **Las sesiones** se guardan en PostgreSQL, que solo guarda un SHA-256 de cada token. Una sesión caduca tras 12 horas sin usarse y, como mucho, 30 días después de entrar. Volver a entrar en el mismo navegador sustituye la sesión anterior, y una contraseña nueva cierra todas las sesiones de la cuenta.
 - **La cookie** es `__Host-floorplan_session`: `HttpOnly` (los scripts de la página no la pueden leer), `Secure` (solo por HTTPS; los navegadores también la aceptan en `http://localhost`) y `SameSite=Strict` (otras webs no la pueden enviar). Las peticiones que el navegador marca como iniciadas por otra web (`Sec-Fetch-Site: cross-site` o `same-site`) se rechazan con `403` en todas las rutas que piden sesión, y al entrar. Eso incluye otro subdominio del mismo sitio: la pantalla del personal tiene que servirse desde el mismo origen que la API (o a través de un proxy inverso que lo consiga).
 - **Intentos fallidos.** Una contraseña mal y un email sin cuenta reciben la misma respuesta, y tardan más o menos lo mismo. Tras 10 intentos fallidos con un mismo email en 15 minutos, ese email recibe `429` hasta que pasen los 15 minutos, aunque la contraseña sea la buena. La cuenta de fallos se guarda en PostgreSQL por email, tenga cuenta o no, así que vale con varias copias de la API y no delata nada. Además, cada dirección de red puede enviar 30 intentos de entrada cada 15 minutos (`LOGIN_RATE_LIMIT_MAX` y `LOGIN_RATE_LIMIT_WINDOW_MINUTES`). Alguien que conozca el email de una persona del personal puede dejarlo bloqueado fallando a propósito; el bloqueo se quita con `npm run staff -- unlock --email <email>`. Aquí también importa `TRUST_PROXY`. Entrar bien pone la cuenta de fallos a cero. Como mucho se comprueban 16 contraseñas a la vez en toda la API (cada una necesita 32 MiB); el resto recibe `503` con `Retry-After`.
-- **Todavía no:** entrar con un enlace por email (llegará cuando la API pueda enviar emails), códigos de doble factor ni gestionar el personal desde una pantalla.
+- **Todavía no:** entrar con un enlace por email, códigos de doble factor ni gestionar el personal desde una pantalla.
 
 ## Editar el plano
 
@@ -195,7 +196,7 @@ Para reservar no hace falta cuenta, así que la ruta se protege sola:
 
 - **Horario de apertura.** Cada local guarda franjas de llegada: la primera y la última hora a la que puede llegar un cliente, en la zona horaria del local, así que las 20:00 siguen siendo las 20:00 cuando cambia la hora. Las franjas se repiten cada semana; una franja puede pasar de medianoche (de 20:00 a 00:30). Los **días especiales** (un festivo, una semana de vacaciones, la cena de Nochevieja) sustituyen el horario semanal de esa fecha; un día especial sin franjas está cerrado. Las reservas fuera de horario reciben `422`. La hora de llegada cuenta por minutos: las 15:30:45 cuentan como las 15:30. Un local que no ha puesto horario no acepta reservas por internet.
 - **Antelación máxima.** Se puede reservar desde hoy hasta `horizonDays` días después (60 por defecto, 730 como máximo), contando los días del calendario del local. Más allá recibe `422`.
-- **Una reserva por cliente a la vez.** Una segunda reserva en el mismo local con el mismo email (da igual mayúsculas o minúsculas) o el mismo teléfono (da igual cómo se escriba) que se pise con otra que ya tiene recibe `409`. Así se para el doble clic en "Reservar" y que una persona se quede varias mesas para la misma noche. Los clics simultáneos hacen cola por cliente, así que pasa exactamente uno. Solo coinciden el mismo email o los mismos dígitos del teléfono: si alguien reserva una vez con email y otra solo con teléfono, o pone el prefijo del país una vez y la otra no, no se detecta. Los datos de contacto todavía no se verifican, así que quien conozca el email de otra persona puede reservar con él antes; la confirmación por email llegará con la pantalla del personal y sus avisos.
+- **Una reserva por cliente a la vez.** Una segunda reserva en el mismo local con el mismo email (da igual mayúsculas o minúsculas) o el mismo teléfono (da igual cómo se escriba) que se pise con otra que ya tiene recibe `409`. Así se para el doble clic en "Reservar" y que una persona se quede varias mesas para la misma noche. Los clics simultáneos hacen cola por cliente, así que pasa exactamente uno. Solo coinciden el mismo email o los mismos dígitos del teléfono: si alguien reserva una vez con email y otra solo con teléfono, o pone el prefijo del país una vez y la otra no, no se detecta. Los datos de contacto no se verifican, así que quien conozca el email de otra persona puede reservar con él antes; a esa dirección le llega el email de "hemos recibido tu reserva", así que su dueño se entera.
 - **Disponibilidad.** `GET /venues/:slug/availability` admite 120 peticiones por dirección cada 15 minutos, de sobra para quien prueba muchos días. Una hora libre es una pista, no una promesa: alguien puede reservarla antes, y lo que decide es la reserva.
 - **Peticiones por dirección.** Cada dirección puede mandar 10 peticiones de reserva cada 15 minutos (se cambia con `BOOKING_RATE_LIMIT_MAX` y `BOOKING_RATE_LIMIT_WINDOW_MINUTES`); después recibe `429` con `Retry-After`. Las peticiones fallidas también cuentan. Un bloque IPv6 `/64` cuenta como una sola dirección. La cuenta vive en la memoria de la API: cada copia de la API cuenta por su lado y al reiniciarla empieza de cero. Los clientes que salen por una misma dirección (una operadora móvil, el wifi del propio local) comparten un límite. Todavía no hay un tope por local.
 - **Detrás de un proxy**, pon en `TRUST_PROXY` la dirección del proxy (por ejemplo `127.0.0.1`). Si no, todos los clientes parecen el proxy y comparten un solo límite. `X-Forwarded-For` solo se cree si viene de las direcciones de esa lista. Con Docker Compose la API ve al proxy a través de la red de Docker (una dirección como `172.17.0.1`), no como `127.0.0.1`: pon esa dirección o ese rango.
@@ -216,12 +217,31 @@ Los clientes reservan en `/reservar/<local>`, sin cuenta:
 
 ![La misma página en un móvil, en árabe: todo se lee desde la derecha, con el nombre del local a la derecha, la columna del lunes del calendario a la derecha y las 13:00 elegidas a la derecha de la primera fila de horas.](docs/images/booking-phone-ar.png)
 
+## El servicio del día
+
+![El servicio del día del Sample Bistro inventado: a la izquierda, el selector de día y las reservas del día, cada una con su hora, nombre, personas, zona y mesa, contacto, nota, estado y botones; a la derecha, el comedor con las mesas ocupadas a la hora elegida en oscuro.](docs/images/service.png)
+
+El personal que ha iniciado sesión abre la pestaña **Servicio**, junto a **Plano** (quien no es propietario empieza ahí):
+
+- **Un día cada vez**, con flechas, un campo de fecha y "Hoy". Las reservas salen por orden de llegada con la hora, las personas, el nombre, el email y el teléfono (se tocan para escribir o llamar), la zona y las mesas, la nota del cliente y el estado. La lista busca reservas nuevas cada minuto.
+- **Botones para lo que puede pasar después:** una reserva pendiente se puede confirmar; las pendientes y las confirmadas se pueden sentar, marcar como "No vino" o cancelar. Cancelar y "No vino" preguntan antes, porque no se pueden deshacer, y las dos liberan la mesa al momento (la [regla contra las reservas dobles](#cómo-se-evitan-las-reservas-dobles) ya no las cuenta). Si dos personas tocan a la vez no se rompe nada: el cambio solo se aplica si la reserva sigue en un estado del que se puede venir, y a la segunda se le dice que la lista cambió.
+- **El plano a una hora.** La zona en pantalla marca en oscuro sus mesas ocupadas a la hora elegida encima (ahora o el inicio de cualquier reserva). Al tocar una reserva, el plano pasa a su hora y rodea sus mesas.
+- **Solo el personal ve los datos del cliente.** Las dos rutas piden una sesión con rol en ese local; las respuestas llevan `Cache-Control: no-store`.
+
+### Emails
+
+- **Al cliente** cuando llega la reserva ("hemos recibido tu reserva"), cuando el personal la confirma y cuando la cancela, en el idioma que eligió en la página de reserva (español, inglés o árabe; los demás idiomas reciben inglés). Quien solo dejó teléfono no recibe ninguno.
+- **A los propietarios del local** cuando llega una reserva nueva, en el idioma del local, con los datos del cliente.
+- **Una cola en PostgreSQL.** Los mensajes se escriben en la misma transacción que la reserva o el cambio, así que no se pierde ninguno, y un servidor de correo caído nunca deshace una reserva. Un proceso dentro de la API los envía en el momento y busca reintentos cada 30 segundos; un mensaje que falla se reintenta a los 1, 5, 15, 60 y 180 minutos, y después se queda en `email_outbox` con el motivo. Los enviados se borran. Pueden funcionar varias copias de la API: cada mensaje lo reclama una sola.
+- **La configuración SMTP** sale del entorno: `SMTP_HOST`, `SMTP_PORT` (587 por defecto), `SMTP_SECURE` (`true` para una conexión cifrada desde el principio; por defecto solo es `true` en el puerto 465), `SMTP_USER`, `SMTP_PASSWORD` y `MAIL_FROM` (obligatorio con `SMTP_HOST`). Mira `.env.example`. **Sin `SMTP_HOST`** (un portátil, la CI) no se envía nada: cada mensaje se escribe en el registro, con la dirección tapada (`g***@example.com`) y sin el texto.
+- **Nada personal en el registro.** Las direcciones de email se tapan en el registro y en el texto de error guardado, y los errores de la base de datos se registran sin los valores de la fila que añade PostgreSQL.
+
 ## Hoja de ruta
 
 1. ~~**Motor de reservas sin reservas dobles.**~~ Hecho.
 2. ~~**Editor del plano.** API para editar zonas y mesas, comprobada por el motor, y la pantalla para dibujarlas.~~ Hecho.
 3. ~~**Página pública de reserva.** Varios idiomas (también de derecha a izquierda), propone horas cercanas cuando la pedida está llena, pensada para cumplir el RGPD.~~ Hecho.
-4. **Panel del local.** El servicio del día, confirmar, cancelar, sentar, avisos por email.
+4. ~~**Panel del local.** El servicio del día, confirmar, cancelar, sentar, avisos por email.~~ Hecho.
 5. **Guía de despliegue.** Copias de seguridad y uso en un local de verdad.
 
 ## Tecnología

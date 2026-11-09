@@ -72,6 +72,8 @@ export function ServiceDay({
 
   const [date, setDate] = useState(today);
   const [day, setDay] = useState<Day | null>(null);
+  /** When the list was last read: "now" on the plan, which moves on with each refresh. */
+  const [loadedAt, setLoadedAt] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [asking, setAsking] = useState<{
@@ -79,8 +81,10 @@ export function ServiceDay({
     action: StaffAction;
   } | null>(null);
   const [pickedId, setPickedId] = useState<string | null>(null);
-  /** The moment the plan shows, as an ISO instant; null follows the default. */
+  /** The moment the plan shows: "now", an ISO instant, or null for the default. */
   const [planAt, setPlanAt] = useState<string | null>(null);
+  // Counts the changes made here, so a refresh that started before one cannot undo it on screen.
+  const changes = useRef(0);
 
   // The day on screen, for answers that arrive after the person moved to another day.
   const shownDate = useRef(date);
@@ -106,10 +110,12 @@ export function ServiceDay({
   useEffect(() => {
     let current = true;
     const fetchDay = () => {
+      const seen = changes.current;
       client.serviceDay(slug, date).then(
         (next) => {
-          if (!current) return;
+          if (!current || seen !== changes.current) return;
           setDay(next);
+          setLoadedAt(new Date().toISOString());
           setLoadError(null);
         },
         (error: unknown) => {
@@ -143,19 +149,22 @@ export function ServiceDay({
   const people = active.reduce((sum, reservation) => sum + reservation.partySize, 0);
 
   // The plan can show the start of each booking, and now when the day is today.
-  const moments = useMemo(() => {
-    const starts = [
-      ...new Set(
-        reservations
-          .filter((reservation) => HOLDING.has(reservation.status))
-          .map((reservation) => reservation.startsAt),
-      ),
-    ];
-    const now = date === today ? [new Date().toISOString()] : [];
-    return [...now, ...starts.sort()];
-  }, [reservations, date, today]);
-  const nowMoment = date === today ? (moments[0] ?? null) : null;
-  const shownAt = planAt ?? moments[0] ?? null;
+  const starts = useMemo(
+    () =>
+      [
+        ...new Set(
+          reservations
+            .filter((reservation) => HOLDING.has(reservation.status))
+            .map((reservation) => reservation.startsAt),
+        ),
+      ].sort(),
+    [reservations],
+  );
+  const isToday = date === today;
+  // Read again on every refresh of the list, so "now" moves on.
+  const nowIso = isToday ? (loadedAt ?? null) : null;
+  const choice = planAt ?? (isToday ? "now" : (starts[0] ?? null));
+  const shownAt = choice === "now" ? nowIso : choice;
   const taken = useMemo(
     () =>
       shownAt ? takenAt(reservations, Date.parse(shownAt)) : new Map<string, ServiceReservation>(),
@@ -178,6 +187,7 @@ export function ServiceDay({
 
   async function act(reservation: ServiceReservation, action: StaffAction) {
     setBusyId(reservation.id);
+    changes.current += 1;
     try {
       const updated = await client.setReservationStatus(slug, reservation.id, action);
       setDay((current) =>
@@ -380,23 +390,24 @@ export function ServiceDay({
     <>
       {sideSlot ? createPortal(side, sideSlot) : side}
       <div className="service-main">
-        {moments.length > 0 && shownAt && (
+        {choice !== null && shownAt && (isToday || starts.length > 0) && (
           <div className="service-plan-bar">
             <label className="plan-at">
               <span>{t.service.planAt}</span>
               <select
-                value={shownAt}
+                value={choice}
                 onChange={(event) => {
                   setPlanAt(event.target.value);
                 }}
               >
-                {[...new Set([shownAt, ...moments])]
+                {isToday && nowIso && (
+                  <option value="now">{`${t.service.now} (${localTime(timeZone, nowIso)})`}</option>
+                )}
+                {[...new Set([...(choice === "now" ? [] : [choice]), ...starts])]
                   .sort((a, b) => Date.parse(a) - Date.parse(b))
                   .map((moment) => (
                     <option key={moment} value={moment}>
-                      {moment === nowMoment
-                        ? `${t.service.now} (${localTime(timeZone, moment)})`
-                        : localTime(timeZone, moment)}
+                      {localTime(timeZone, moment)}
                     </option>
                   ))}
               </select>

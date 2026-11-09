@@ -52,6 +52,9 @@ export function smtpMailer(settings: SmtpSettings): Mailer {
     host: settings.host,
     port: settings.port,
     secure: settings.secure,
+    // With a password on a connection that starts plain, insist on STARTTLS: never send the
+    // password, or guests' details, unencrypted.
+    requireTLS: !settings.secure && settings.user !== undefined,
     // Short waits, so a mail server that hangs only delays the next try.
     connectionTimeout: 10_000,
     greetingTimeout: 10_000,

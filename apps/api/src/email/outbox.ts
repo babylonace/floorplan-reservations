@@ -15,7 +15,6 @@ type Queryable = Pick<PoolClient, "query">;
 export const RETRY_MINUTES = [1, 5, 15, 60, 180] as const;
 /** A worker that stopped halfway leaves its rows; another one picks them up after this. */
 const CLAIM_MINUTES = 10;
-const BATCH = 20;
 
 /** Queues "we have your booking" for the guest and "new booking" for each owner of the venue. */
 export async function queueNewBookingEmails(db: Queryable, reservationId: string): Promise<void> {
@@ -60,6 +59,7 @@ interface ClaimedRow {
 }
 
 interface FactsRow {
+  status: string;
   venue_name: string;
   time_zone: string;
   starts_at: Date;
@@ -71,9 +71,12 @@ interface FactsRow {
   tables: string;
 }
 
-async function loadFacts(db: Queryable, reservationId: string): Promise<EmailFacts | null> {
+async function loadFacts(
+  db: Queryable,
+  reservationId: string,
+): Promise<(EmailFacts & { status: string }) | null> {
   const { rows } = await db.query<FactsRow>(
-    `select v.name as venue_name, v.time_zone, r.starts_at, r.party_size, r.guest_name,
+    `select r.status, v.name as venue_name, v.time_zone, r.starts_at, r.party_size, r.guest_name,
             r.guest_email, r.guest_phone, r.notes,
             coalesce((select string_agg(z.name || ' · ' || t.label, ', ' order by z.sort_order, t.label)
                         from reservation_tables rt
@@ -87,6 +90,7 @@ async function loadFacts(db: Queryable, reservationId: string): Promise<EmailFac
   const row = rows[0];
   if (!row) return null;
   return {
+    status: row.status,
     venueName: row.venue_name,
     timeZone: row.time_zone,
     startsAt: row.starts_at,
@@ -112,61 +116,86 @@ interface Log {
   warn: (details: object, message: string) => void;
 }
 
+/** Statuses a booking must still have for a guest message to make sense when it goes out. */
+const STILL_TRUE: Partial<Record<EmailKind, readonly string[]>> = {
+  guest_confirmed: ["confirmed", "seated", "completed"],
+  guest_cancelled: ["cancelled"],
+};
+
+/** Messages that gave up are kept this long (to see why), then deleted with their address. */
+const KEEP_FAILED_DAYS = 30;
+
 /**
- * Sends the messages that are due, a batch at a time, and returns how many went out. Each row
- * is claimed first, so two workers (or two copies of the API) never send the same message.
+ * Sends the messages that are due, one at a time in the order they were queued, and returns
+ * how many went out. Each row is claimed before it is sent, so two workers (or two copies of
+ * the API) never send the same message. `shouldStop` lets a closing server stop between two.
  */
 export async function deliverDueEmails(
   pool: Pool,
   mailer: Mailer,
   now: Date,
   log: Log,
+  shouldStop: () => boolean = () => false,
 ): Promise<number> {
+  await pool.query(
+    `delete from email_outbox
+      where next_attempt_at is null and created_at < $1::timestamptz - make_interval(days => $2)`,
+    [now, KEEP_FAILED_DAYS],
+  );
   let sent = 0;
-  for (;;) {
+  while (!shouldStop()) {
     const { rows } = await pool.query<ClaimedRow>(
       `with due as (
          select id from email_outbox
           where next_attempt_at <= $1
-          order by next_attempt_at
-          limit $2
+          order by next_attempt_at, created_at
+          limit 1
           for update skip locked
        )
        update email_outbox o
           set attempts = o.attempts + 1,
-              next_attempt_at = $1::timestamptz + make_interval(mins => $3)
+              next_attempt_at = $1::timestamptz + make_interval(mins => $2)
          from due where o.id = due.id
        returning o.id, o.reservation_id, o.kind, o.recipient, o.locale, o.attempts`,
-      [now, BATCH, CLAIM_MINUTES],
+      [now, CLAIM_MINUTES],
     );
-    if (rows.length === 0) return sent;
+    const row = rows[0];
+    if (!row) return sent;
 
-    for (const row of rows) {
-      try {
-        const facts = await loadFacts(pool, row.reservation_id);
-        // The booking was deleted after the message was queued: nothing to say any more.
-        if (facts) {
-          await mailer.send({ to: row.recipient, ...renderEmail(row.kind, row.locale, facts) });
-          sent += 1;
-        }
-        await pool.query("delete from email_outbox where id = $1", [row.id]);
-      } catch (error) {
-        const wait = RETRY_MINUTES[row.attempts - 1];
-        const reason = safeErrorText(error);
-        await pool.query(
-          `update email_outbox set last_error = $2,
-                  next_attempt_at = case when $3::int is null then null
-                                         else $4::timestamptz + make_interval(mins => $3::int) end
-            where id = $1`,
-          [row.id, reason, wait ?? null, now],
-        );
-        log.warn(
-          { kind: row.kind, to: maskEmail(row.recipient), attempts: row.attempts, reason },
-          wait === undefined ? "E-mail failed; giving up" : "E-mail failed; will try again",
-        );
+    try {
+      const facts = await loadFacts(pool, row.reservation_id);
+      const still = STILL_TRUE[row.kind];
+      // Nothing to say any more: the booking was deleted, or it changed again since (a
+      // "confirmed" message that failed until the booking was cancelled).
+      if (facts && (!still || still.includes(facts.status))) {
+        await mailer.send({ to: row.recipient, ...renderEmail(row.kind, row.locale, facts) });
+        sent += 1;
       }
+    } catch (error) {
+      const wait = RETRY_MINUTES[row.attempts - 1];
+      const reason = safeErrorText(error);
+      await pool.query(
+        `update email_outbox set last_error = $2,
+                next_attempt_at = case when $3::int is null then null
+                                       else $4::timestamptz + make_interval(mins => $3::int) end
+          where id = $1`,
+        [row.id, reason, wait ?? null, now],
+      );
+      log.warn(
+        { kind: row.kind, to: maskEmail(row.recipient), attempts: row.attempts, reason },
+        wait === undefined ? "E-mail failed; giving up" : "E-mail failed; will try again",
+      );
+      continue;
+    }
+    // Apart from sending: if only this fails, the message is not sent a second time until its
+    // claim runs out, and the log says why.
+    try {
+      await pool.query("delete from email_outbox where id = $1", [row.id]);
+    } catch (error) {
+      log.warn({ kind: row.kind, reason: safeErrorText(error) }, "Sent e-mail stayed in the queue");
     }
   }
+  return sent;
 }
 
 export interface EmailWorker {
@@ -195,7 +224,7 @@ export function startEmailWorker(options: {
       again = true;
       return;
     }
-    running = deliverDueEmails(pool, mailer, now(), log)
+    running = deliverDueEmails(pool, mailer, now(), log, () => stopped)
       .then(
         () => undefined,
         (error: unknown) => {

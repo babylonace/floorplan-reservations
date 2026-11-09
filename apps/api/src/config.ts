@@ -76,7 +76,7 @@ export function parseSmtp(env: NodeJS.ProcessEnv): SmtpSettings | undefined {
   const secure =
     env.SMTP_SECURE === undefined || env.SMTP_SECURE === ""
       ? port === 465
-      : env.SMTP_SECURE === "true";
+      : ["true", "1", "yes"].includes(env.SMTP_SECURE.trim().toLowerCase());
   const user = env.SMTP_USER?.trim() ? env.SMTP_USER.trim() : undefined;
   return {
     host,

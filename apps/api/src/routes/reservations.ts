@@ -370,8 +370,6 @@ async function bookBestTables(
         continue;
       }
       await client.query("release savepoint attempt");
-      // In the same transaction: the messages exist exactly when the booking does.
-      await queueNewBookingEmails(client, created.id);
 
       const zone = plan.find((candidate) => candidate.id === best.zoneId);
       return {
@@ -520,6 +518,18 @@ export const reservationRoutes: FastifyPluginAsync<ReservationRouteOptions> = (
         booking = (await guestAlreadyBooked(client, venue.id, body, startsAt, endsAt))
           ? "duplicate"
           : await bookBestTables(client, venue.id, body, locale, startsAt, endsAt);
+        if (booking !== null && booking !== "duplicate") {
+          // In the same transaction, so the messages exist exactly when the booking does. A
+          // problem here loses the messages, never the booking.
+          await client.query("savepoint emails");
+          try {
+            await queueNewBookingEmails(client, booking.id);
+            await client.query("release savepoint emails");
+          } catch (error) {
+            await client.query("rollback to savepoint emails");
+            request.log.error({ code: errorCode(error) }, "Could not queue the booking e-mails");
+          }
+        }
         await client.query(booking !== null && booking !== "duplicate" ? "commit" : "rollback");
         client.release();
       } catch (error) {

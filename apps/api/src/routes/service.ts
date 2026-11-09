@@ -116,6 +116,9 @@ function toApi(row: ReservationRow) {
 }
 
 function isRealDate(date: string): boolean {
+  // PostgreSQL has no year 0, and the day after 9999-12-31 overflows.
+  const year = Number(date.slice(0, 4));
+  if (year < 1970 || year > 2999) return false;
   const parsed = new Date(`${date}T00:00:00Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(date);
 }
