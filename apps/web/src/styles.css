@@ -1595,3 +1595,311 @@ kbd {
 .modal .login-intro {
   margin-bottom: 1.2rem;
 }
+
+/* Plan or the day's service, before the zone tabs. */
+
+.view-switch {
+  display: flex;
+  gap: 0.25rem;
+  padding-inline-end: 0.6rem;
+  border-inline-end: 1px solid var(--line);
+  align-self: stretch;
+  align-items: flex-end;
+}
+
+.view-tab {
+  min-height: 1.75rem;
+  padding: 0.15rem 0.75rem;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: transparent;
+  font-weight: 700;
+  color: var(--ink-soft);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.view-tab[aria-current="page"] {
+  background: var(--ink);
+  color: #ffffff;
+}
+
+/* The day's service: the bookings in the left column, the zone with its taken tables right. */
+
+.service-toolbar {
+  gap: 0.35rem;
+}
+
+.day-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.day-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 1.75rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--panel);
+}
+
+.day-nav .icon-button {
+  padding: 0;
+}
+
+.service-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.service-card {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  border-inline-start: 3px solid transparent;
+}
+
+.service-card.is-picked {
+  border-inline-start-color: var(--marigold);
+  background: #fdf6e3;
+}
+
+.service-card.status-cancelled,
+.service-card.status-no_show {
+  color: var(--ink-soft);
+}
+
+.service-card.status-cancelled .service-guest,
+.service-card.status-no_show .service-guest {
+  text-decoration: line-through;
+}
+
+.service-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  cursor: pointer;
+}
+
+.service-card-head time {
+  font-weight: 700;
+}
+
+.service-guest {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-status.status-pending {
+  background: #fcefc7;
+  color: #6b4d00;
+}
+
+.service-status.status-confirmed {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.service-status.status-seated,
+.service-status.status-completed {
+  background: var(--chrome);
+  color: var(--ink);
+}
+
+.service-status.status-cancelled,
+.service-status.status-no_show {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.service-meta,
+.service-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.75rem;
+  color: var(--ink-soft);
+}
+
+.service-contact a {
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+.service-note {
+  padding: 0.15rem 0.4rem;
+  border-inline-start: 3px solid var(--marigold);
+  background: var(--chrome);
+  overflow-wrap: anywhere;
+}
+
+.service-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.15rem;
+}
+
+.service-actions .button-danger-quiet {
+  padding-inline: 0.4rem;
+}
+
+.service-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.service-plan-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  padding: 0.3rem 0.75rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.plan-at {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.plan-at select {
+  min-height: 1.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--panel);
+}
+
+.plan-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  border: 1.5px solid var(--ink);
+  border-radius: 2px;
+}
+
+.legend-swatch.is-taken {
+  background: var(--ink);
+}
+
+.legend-swatch.is-free {
+  margin-inline-start: 0.5rem;
+  background: var(--paper);
+}
+
+.service-plan {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0.75rem;
+}
+
+.service-plan-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.service-floor {
+  fill: var(--paper);
+  stroke: var(--ink);
+  stroke-width: 4;
+}
+
+.service-table rect,
+.service-table ellipse {
+  stroke: var(--ink);
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.service-table.is-free rect,
+.service-table.is-free ellipse {
+  fill: var(--panel);
+}
+
+.service-table.is-taken rect,
+.service-table.is-taken ellipse {
+  fill: var(--ink);
+}
+
+.service-table text {
+  font-weight: 700;
+  fill: var(--ink);
+}
+
+.service-table.is-taken text {
+  fill: #ffffff;
+}
+
+.service-table.is-highlighted rect,
+.service-table.is-highlighted ellipse {
+  stroke: var(--marigold);
+  stroke-width: 6;
+}
+
+@media (pointer: coarse) {
+  .view-tab,
+  .day-input,
+  .plan-at select,
+  .service-card-head {
+    min-height: 2rem;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 900px) {
+  .view-tab,
+  .day-input,
+  .plan-at select,
+  .service-card-head {
+    min-height: 2.25rem;
+  }
+}
+
+/* Narrow screens: during service the list comes before the plan. */
+@media (max-width: 900px) {
+  .workspace.is-service {
+    grid-template-areas:
+      "top account"
+      "tabs tabs"
+      "side side"
+      "main main";
+  }
+
+  .workspace.is-service .side-slot {
+    border-top: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .service-canvas {
+    flex: none;
+    height: clamp(16rem, 70vw, 60vh);
+  }
+}

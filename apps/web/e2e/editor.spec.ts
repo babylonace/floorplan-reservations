@@ -234,6 +234,8 @@ test("puts the plan on the right, as tall as the window, and the rest in a colum
 
 test("lets staff look without changing anything, in English too", async ({ page }) => {
   await signIn(page, STAFF);
+  // Staff start on the day's service; the plan is one tab away.
+  await page.getByRole("button", { name: "Plano", exact: true }).click();
   await expect(
     page.getByText("Solo lectura: los cambios los hace la persona propietaria."),
   ).toBeVisible();

@@ -107,3 +107,31 @@ export interface Booking {
   partySize: number;
   tables: { id: string; label: string; zoneId: string }[];
 }
+
+/** The day's service, for the venue's staff. */
+
+export type ReservationStatus =
+  "pending" | "confirmed" | "seated" | "completed" | "cancelled" | "no_show";
+
+/** The statuses staff can set. */
+export type StaffAction = "confirmed" | "seated" | "no_show" | "cancelled";
+
+export interface ServiceReservation {
+  id: string;
+  status: ReservationStatus;
+  startsAt: string;
+  endsAt: string;
+  partySize: number;
+  guestName: string;
+  guestEmail: string | null;
+  guestPhone: string | null;
+  notes: string | null;
+  locale: string;
+  tables: { id: string; label: string; zoneId: string; zoneName: string }[];
+}
+
+export interface ServiceDay {
+  date: string;
+  timeZone: string;
+  reservations: ServiceReservation[];
+}

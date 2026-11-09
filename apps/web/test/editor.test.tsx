@@ -610,8 +610,13 @@ describe("the plan editor", () => {
             venues: [{ slug: "test-venue", name: "Test Venue", role: "staff" as const }],
           }),
         ),
+        serviceDay: vi.fn((_slug: string, date: string) =>
+          Promise.resolve({ date, timeZone: "Europe/Madrid", reservations: [] }),
+        ),
       }),
     );
+    // Staff start on the day's service; the plan is one tab away.
+    await user.click(await screen.findByRole("button", { name: "Plano" }));
     expect(
       await screen.findByText("Solo lectura: los cambios los hace la persona propietaria."),
     ).toBeInTheDocument();

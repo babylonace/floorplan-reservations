@@ -4,6 +4,7 @@ import type { Account, FloorPlan, ZoneFields } from "../api/types";
 import { describeError, isSignedOut } from "../errors";
 import { useI18n } from "../i18n/i18n";
 import { Editor } from "./Editor";
+import { ServiceDay } from "./ServiceDay";
 import {
   ButtonLabel,
   ConfirmDialog,
@@ -39,6 +40,10 @@ export function Workspace({
   const [zoneError, setZoneError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<NoticeMessage | null>(null);
+  // Staff who cannot change the plan start on the day's bookings; owners on the plan.
+  const [view, setView] = useState<"plan" | "service">(() =>
+    account.venues[0]?.role === "owner" ? "plan" : "service",
+  );
 
   const venue = account.venues.find((candidate) => candidate.slug === slug) ?? null;
   const editable = venue?.role === "owner";
@@ -146,7 +151,7 @@ export function Workspace({
   return (
     <NoticeContext.Provider value={setNotice}>
       <SideSlotContext.Provider value={sideSlot}>
-        <div className="workspace">
+        <div className={view === "service" ? "workspace is-service" : "workspace"}>
           <header className="app-header">
             <a className="skip-link" href="#main">
               {t.header.skipToPlan}
@@ -215,29 +220,51 @@ export function Workspace({
           <NoticeArea notice={notice} onClose={closeNotice} />
 
           {venue && (
-            <nav className="zone-bar" aria-label={t.zones.listLabel}>
-              <ul>
-                {zones.map((candidate) => (
-                  <li key={candidate.id}>
-                    <button
-                      type="button"
-                      className="zone-tab"
-                      aria-current={candidate.id === zone?.id ? "true" : undefined}
-                      onClick={() => {
-                        if (candidate.id === zone?.id) return;
-                        guarded(() => {
-                          setDirty(0);
-                          setNotice(null);
-                          setZoneId(candidate.id);
-                        });
-                      }}
-                    >
-                      {candidate.name}
-                    </button>
-                  </li>
+            <div className="zone-bar">
+              <nav className="view-switch" aria-label={t.views.label}>
+                {(["service", "plan"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    className="view-tab"
+                    aria-current={view === option ? "page" : undefined}
+                    onClick={() => {
+                      if (option === view) return;
+                      guarded(() => {
+                        setDirty(0);
+                        setNotice(null);
+                        setView(option);
+                      });
+                    }}
+                  >
+                    {t.views[option]}
+                  </button>
                 ))}
-              </ul>
-              {editable && (
+              </nav>
+              <nav className="zone-tabs" aria-label={t.zones.listLabel}>
+                <ul>
+                  {zones.map((candidate) => (
+                    <li key={candidate.id}>
+                      <button
+                        type="button"
+                        className="zone-tab"
+                        aria-current={candidate.id === zone?.id ? "true" : undefined}
+                        onClick={() => {
+                          if (candidate.id === zone?.id) return;
+                          guarded(() => {
+                            setDirty(0);
+                            setNotice(null);
+                            setZoneId(candidate.id);
+                          });
+                        }}
+                      >
+                        {candidate.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+              {editable && view === "plan" && (
                 <button
                   type="button"
                   className="button button-quiet zone-add"
@@ -254,7 +281,7 @@ export function Workspace({
                   {t.zones.add}
                 </button>
               )}
-            </nav>
+            </div>
           )}
 
           {!venue ? (
@@ -263,7 +290,7 @@ export function Workspace({
             </main>
           ) : (
             <main className="workspace-main" id="main" tabIndex={-1}>
-              {!editable && (
+              {!editable && view === "plan" && (
                 <p className="read-only-note" role="note">
                   {t.venues.readOnly}
                 </p>
@@ -288,6 +315,15 @@ export function Workspace({
                 <p className="empty-state" role="status">
                   {t.venues.loadingPlan}
                 </p>
+              ) : view === "service" ? (
+                <ServiceDay
+                  key={plan.venue.slug}
+                  slug={plan.venue.slug}
+                  plan={plan}
+                  zoneId={zone?.id ?? null}
+                  onZoneChange={setZoneId}
+                  onSessionLost={onSessionLost}
+                />
               ) : zone ? (
                 <Editor
                   key={`${plan.venue.slug}:${zone.id}`}

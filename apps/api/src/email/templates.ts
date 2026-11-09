@@ -157,7 +157,7 @@ export function renderEmail(kind: EmailKind, requested: string, facts: EmailFact
     "",
     message.lead,
     "",
-    `${facts.venueName}`,
+    facts.venueName,
     `${when} · ${people}`,
     ...(kind === "guest_cancelled" ? [] : ["", words.cantCome]),
   ];

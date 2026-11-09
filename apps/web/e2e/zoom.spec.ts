@@ -125,6 +125,7 @@ test("a table dragged to the edge of a zoomed-in plan stays under the pointer", 
 
 test("staff can move around a zoomed-in plan from a table too", async ({ page }) => {
   await signIn(page, STAFF);
+  await page.getByRole("button", { name: "Plano", exact: true }).click();
   const top = tableButton(page, "1").locator(".table-top");
   // Zoom in on table 1 itself, so it stays under the pointer.
   const fitted = middle(await box(top));
