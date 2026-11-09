@@ -280,7 +280,7 @@ export function Workspace({
                   <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                     <path d="M8 3v10M3 8h10" />
                   </svg>
-                  {t.zones.add}
+                  <span className="zone-add-label">{t.zones.add}</span>
                 </button>
               )}
             </div>
